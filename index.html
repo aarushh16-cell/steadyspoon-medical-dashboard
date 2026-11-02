@@ -1,0 +1,2618 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SteadySpoon — Clinical IoT Assistive Dining & Tremor Suppression Dashboard</title>
+  <meta name="description" content="Production-grade medical telemetry dashboard for SteadySpoon IoT tremor-cancelling assistive dining system. Real-time ESP32/MPU6050 & BMI270 stabilization telemetrics.">
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            medDark: '#0b0f19',
+            medCard: '#131b2e',
+            medCardHover: '#18223a',
+            medPanel: '#0e1526',
+            medBorder: '#1e293b',
+            medBorderLight: '#334155',
+            accentCyan: '#06b6d4',
+            accentEmerald: '#10b981',
+            accentAmber: '#f59e0b',
+            accentRose: '#f43f5e',
+            accentViolet: '#8b5cf6'
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 20px -3px rgba(6, 182, 212, 0.35)',
+            'glow-emerald': '0 0 20px -3px rgba(16, 185, 129, 0.35)',
+            'glow-rose': '0 0 20px -3px rgba(244, 63, 94, 0.35)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* Custom Scrollbar for medical console */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0b0f19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+
+    /* Pulse animation for telemetry indicator dots */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.3); opacity: 0.2; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .pulse-ring-anim {
+      animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    /* High DPI crisp canvas */
+    canvas {
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+    }
+
+    /* Range slider custom styling */
+    input[type=range] {
+      -webkit-appearance: none;
+      background: #1e293b;
+      border-radius: 9999px;
+      height: 6px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 18px;
+      width: 18px;
+      border-radius: 50%;
+      background: #06b6d4;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+      transition: transform 0.1s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+      background: #38bdf8;
+    }
+
+    /* Print clinical summary report styles */
+    @media print {
+      body {
+        background-color: #ffffff !important;
+        color: #0f172a !important;
+      }
+      .no-print, nav, #controlMatrix, #hardwareFleet, #liveCanvasSection {
+        display: none !important;
+      }
+      #printReportView {
+        display: block !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-medDark text-slate-100 min-h-screen font-sans antialiased selection:bg-accentCyan selection:text-slate-900">
+
+  <!-- ========================================================================= -->
+  <!-- 1. NAVIGATION & SYSTEM CONTROL BAR -->
+  <!-- ========================================================================= -->
+  <header class="sticky top-0 z-40 bg-medDark/90 backdrop-blur-md border-b border-medBorder transition-all duration-200">
+    <div class="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col xl:flex-row items-stretch xl:items-center justify-between py-3 gap-4">
+        
+        <!-- Brand & Clinical Device Identification -->
+        <div class="flex items-center gap-3">
+          <div class="relative flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500/20 to-emerald-500/10 border border-accentCyan/30 shadow-glow-cyan">
+            <i data-lucide="crosshair" class="w-6 h-6 text-accentCyan animate-spin" style="animation-duration: 20s;"></i>
+            <span class="absolute -top-1 -right-1 w-3 h-3 bg-accentEmerald rounded-full border-2 border-medDark"></span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
+                SteadySpoon <span class="text-accentCyan font-light">Medical</span>
+              </h1>
+              <span class="text-[10px] uppercase font-mono font-bold tracking-widest px-2 py-0.5 rounded-full bg-cyan-950/80 text-accentCyan border border-cyan-800/60">
+                IoT Active Gimbal
+              </span>
+              <span class="hidden md:inline-flex text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-slate-800/80 text-slate-300 border border-slate-700">
+                FDA Class I Assistive
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 flex items-center gap-2">
+              <span>Patient: <strong class="text-slate-200 font-medium">Elena Rostova (71y)</strong></span>
+              <span class="text-slate-600">•</span>
+              <span>Dx: <strong class="text-amber-400 font-medium">Parkinsonian Resting Tremor</strong></span>
+              <span class="hidden sm:inline text-slate-600">•</span>
+              <span class="hidden sm:inline text-slate-400">Medication: <span class="text-emerald-400 font-mono">Levodopa 25/100mg (+2.5h)</span></span>
+            </p>
+          </div>
+        </div>
+
+        <!-- Central Hub Indicator (Raspberry Pi Zero 2 W) -->
+        <div class="flex items-center justify-between sm:justify-center gap-4 bg-medCard/70 border border-medBorder rounded-xl px-4 py-2 text-xs font-mono">
+          <div class="flex items-center gap-2.5">
+            <span class="relative flex h-2.5 w-2.5">
+              <span class="pulse-ring-anim absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-accentEmerald"></span>
+            </span>
+            <div>
+              <div class="flex items-center gap-1.5 font-semibold text-slate-200">
+                <i data-lucide="wifi" class="w-3.5 h-3.5 text-accentEmerald"></i>
+                <span>Raspberry Pi Zero 2 W</span>
+                <span class="text-slate-500">(192.168.4.1)</span>
+              </div>
+              <div class="text-[11px] text-slate-400 flex items-center gap-2 font-normal">
+                <span class="text-accentEmerald">WebSocket Connected</span>
+                <span class="text-slate-600">•</span>
+                <span id="networkPing">12 ms latency</span>
+                <span class="text-slate-600">•</span>
+                <span id="networkDataRate">28.4 kB/s</span>
+              </div>
+            </div>
+          </div>
+          <button id="toggleAudioBtn" onclick="toggleAudioTelemetry()" title="Toggle Web Audio clicks on tremor bursts" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1 transition">
+            <i id="audioIcon" data-lucide="volume-2" class="w-3.5 h-3.5 text-accentCyan"></i>
+            <span id="audioLabel" class="text-[10px]">Audio On</span>
+          </button>
+        </div>
+
+        <!-- Active Meal Session Controls -->
+        <div class="flex flex-wrap items-center gap-2.5 justify-end">
+          <!-- Live session timer pill -->
+          <div id="sessionTimerBadge" class="hidden flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-950/50 border border-rose-500/40 text-xs font-mono text-rose-300">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+            <span class="font-bold tracking-wider">REC:</span>
+            <span id="sessionTimer">00:00:00</span>
+          </div>
+
+          <!-- Session Toggle Button -->
+          <button id="sessionToggleBtn" onclick="toggleMealSession()" class="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40 border border-emerald-400/30 transition transform active:scale-95">
+            <i data-lucide="play" id="sessionBtnIcon" class="w-4 h-4 fill-current"></i>
+            <span id="sessionBtnText">Start Meal Session</span>
+          </button>
+
+          <!-- Zero Calibrate Gimbal Button -->
+          <button id="calibrateBtn" onclick="triggerGimbalCalibration()" class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg font-medium text-xs sm:text-sm bg-medCard hover:bg-medCardHover border border-medBorderLight text-slate-200 transition hover:border-accentCyan active:scale-95">
+            <i data-lucide="compass" class="w-4 h-4 text-accentCyan"></i>
+            <span>Zero Calibrate Gimbal</span>
+          </button>
+
+          <!-- Export CSV / JSON Button -->
+          <div class="relative inline-block text-left">
+            <button onclick="toggleExportMenu()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg font-medium text-xs sm:text-sm bg-medCard hover:bg-medCardHover border border-medBorderLight text-slate-300 transition hover:border-slate-500">
+              <i data-lucide="download" class="w-4 h-4 text-slate-400"></i>
+              <span>Export</span>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <div id="exportDropdown" class="hidden absolute right-0 mt-2 w-48 rounded-xl bg-medCard border border-medBorder shadow-2xl z-50 py-1.5 text-xs font-mono">
+              <a href="javascript:void(0)" onclick="exportTelemetryData('csv')" class="flex items-center gap-2 px-4 py-2 text-slate-200 hover:bg-slate-800 transition">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4 text-accentEmerald"></i>
+                <span>Telemetry CSV Log</span>
+              </a>
+              <a href="javascript:void(0)" onclick="exportTelemetryData('json')" class="flex items-center gap-2 px-4 py-2 text-slate-200 hover:bg-slate-800 transition">
+                <i data-lucide="file-json" class="w-4 h-4 text-accentCyan"></i>
+                <span>Complete JSON Package</span>
+              </a>
+              <div class="border-t border-slate-800 my-1"></div>
+              <a href="javascript:void(0)" onclick="openClinicalReportModal(pastSessions[0].id)" class="flex items-center gap-2 px-4 py-2 text-slate-200 hover:bg-slate-800 transition">
+                <i data-lucide="printer" class="w-4 h-4 text-accentViolet"></i>
+                <span>Print Clinical Report</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- MAIN CONTENT CONTAINER -->
+  <!-- ========================================================================= -->
+  <main class="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+    <!-- ======================================================================= -->
+    <!-- 2. HARDWARE FLEET STATUS (3-Card Telemetry Grid) -->
+    <!-- ======================================================================= -->
+    <section aria-labelledby="hardwareFleetHeading">
+      <div class="flex items-center justify-between mb-3">
+        <h2 id="hardwareFleetHeading" class="text-xs uppercase tracking-wider font-mono font-semibold text-slate-400 flex items-center gap-2">
+          <i data-lucide="cpu" class="w-4 h-4 text-accentCyan"></i>
+          Hardware Fleet Live Health & Mesh Telemetry
+        </h2>
+        <span class="text-[11px] font-mono text-slate-500">2.4GHz IEEE 802.15.1 BLE + 802.11n Mesh</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- UNIT 1: THE SPOON (Active Dynamic Stabilization) -->
+        <div class="bg-medCard border border-medBorder hover:border-slate-700/80 rounded-2xl p-4 transition-all duration-200 shadow-lg relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 rounded-full blur-2xl group-hover:bg-cyan-500/10 transition"></div>
+          
+          <div class="flex items-start justify-between pb-3 border-b border-medBorder">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-xl bg-cyan-950/60 border border-cyan-800/40 text-accentCyan">
+                <i data-lucide="utensils" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                  Unit 1: The Spoon
+                </h3>
+                <p class="text-[11px] text-slate-400 font-mono">Active Stabilization Core</p>
+              </div>
+            </div>
+            <span id="spoonStatusBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-emerald-950/80 text-accentEmerald border border-emerald-800/60">
+              <span class="w-1.5 h-1.5 rounded-full bg-accentEmerald animate-pulse"></span>
+              Stabilizing
+            </span>
+          </div>
+
+          <!-- Specs details -->
+          <div class="mt-3 grid grid-cols-3 gap-1 py-1.5 px-2 rounded-lg bg-medPanel text-[11px] font-mono border border-medBorder/50">
+            <div>
+              <span class="text-slate-500 block text-[9px]">MCU</span>
+              <span class="text-slate-300 font-semibold">ESP32 240MHz</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">IMU SENSOR</span>
+              <span class="text-slate-300 font-semibold">MPU6050 6-Axis</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">ACTUATORS</span>
+              <span class="text-slate-300 font-semibold">2× MG92B Metal</span>
+            </div>
+          </div>
+
+          <!-- Telemetry readouts -->
+          <div class="mt-3 space-y-2.5 font-mono text-xs">
+            <!-- Battery gauge -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-400 flex items-center gap-1.5">
+                  <i data-lucide="battery-charging" class="w-3.5 h-3.5 text-accentEmerald"></i>
+                  7.4V 2S LiPo Battery
+                </span>
+                <span class="text-slate-200 font-semibold" id="spoonBatteryText">7.82V • 84%</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div id="spoonBatteryBar" class="h-full rounded-full bg-gradient-to-r from-teal-500 to-accentEmerald transition-all duration-500" style="width: 84%;"></div>
+              </div>
+            </div>
+
+            <!-- Servo Temps & Loop Rate -->
+            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-medBorder/60">
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="thermometer" class="w-3 h-3 text-amber-400"></i>
+                  Servo Temps (P/R)
+                </div>
+                <div class="text-sm font-semibold text-slate-200">
+                  <span id="servoPitchTemp">34.2</span>°C / <span id="servoRollTemp">35.0</span>°C
+                </div>
+                <span class="text-[9px] text-emerald-400">Nominal (&lt;45°C)</span>
+              </div>
+
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="repeat" class="w-3 h-3 text-accentCyan"></i>
+                  Control Loop Rate
+                </div>
+                <div class="text-sm font-semibold text-accentCyan">
+                  <span id="spoonLoopFreq">200.4</span> Hz
+                </div>
+                <span class="text-[9px] text-slate-400">Latency: 4.8ms</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UNIT 2: THE RING (Wearable Tremor Monitoring) -->
+        <div class="bg-medCard border border-medBorder hover:border-slate-700/80 rounded-2xl p-4 transition-all duration-200 shadow-lg relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition"></div>
+
+          <div class="flex items-start justify-between pb-3 border-b border-medBorder">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-xl bg-teal-950/60 border border-teal-800/40 text-accentEmerald">
+                <i data-lucide="circle-dot" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                  Unit 2: The Ring
+                </h3>
+                <p class="text-[11px] text-slate-400 font-mono">Wearable Proximal IMU</p>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-cyan-950/80 text-accentCyan border border-cyan-800/60">
+              <span class="w-1.5 h-1.5 rounded-full bg-accentCyan animate-pulse"></span>
+              Streaming
+            </span>
+          </div>
+
+          <!-- Specs details -->
+          <div class="mt-3 grid grid-cols-3 gap-1 py-1.5 px-2 rounded-lg bg-medPanel text-[11px] font-mono border border-medBorder/50">
+            <div>
+              <span class="text-slate-500 block text-[9px]">RADIO</span>
+              <span class="text-slate-300 font-semibold">MDBT42Q BLE</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">SENSOR</span>
+              <span class="text-slate-300 font-semibold">Bosch BMI270</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">PLACEMENT</span>
+              <span class="text-slate-300 font-semibold">Index Proximal</span>
+            </div>
+          </div>
+
+          <!-- Telemetry readouts -->
+          <div class="mt-3 space-y-2.5 font-mono text-xs">
+            <!-- Ring Battery -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-400 flex items-center gap-1.5">
+                  <i data-lucide="zap" class="w-3.5 h-3.5 text-accentCyan"></i>
+                  3.7V 50mAh Micro-LiPo
+                </span>
+                <span class="text-slate-200 font-semibold" id="ringBatteryText">4.08V • 91%</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div id="ringBatteryBar" class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500 transition-all duration-500" style="width: 91%;"></div>
+              </div>
+            </div>
+
+            <!-- BLE Signal & Stream rate -->
+            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-medBorder/60">
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="radio" class="w-3 h-3 text-accentEmerald"></i>
+                  BLE 5.2 RSSI
+                </div>
+                <div class="text-sm font-semibold text-slate-200 flex items-center gap-1.5">
+                  <span id="ringRssi">-56</span> dBm
+                  <span class="inline-block w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <span class="text-[9px] text-slate-400">0.0% packet drop</span>
+              </div>
+
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="activity" class="w-3 h-3 text-accentCyan"></i>
+                  Stream Sampling
+                </div>
+                <div class="text-sm font-semibold text-accentEmerald">
+                  <span id="ringStreamRate">100.0</span> Hz
+                </div>
+                <span class="text-[9px] text-slate-400">Continuous FIFO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UNIT 3: THE POCKET LOGGER (Central Edge Hub) -->
+        <div class="bg-medCard border border-medBorder hover:border-slate-700/80 rounded-2xl p-4 transition-all duration-200 shadow-lg relative overflow-hidden group">
+          <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-2xl group-hover:bg-indigo-500/10 transition"></div>
+
+          <div class="flex items-start justify-between pb-3 border-b border-medBorder">
+            <div class="flex items-center gap-3">
+              <div class="p-2.5 rounded-xl bg-indigo-950/60 border border-indigo-800/40 text-indigo-400">
+                <i data-lucide="hard-drive" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                  Unit 3: Pocket Logger
+                </h3>
+                <p class="text-[11px] text-slate-400 font-mono">Central Edge Compute & Storage</p>
+              </div>
+            </div>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-indigo-950/80 text-indigo-300 border border-indigo-800/60">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+              AP Host Active
+            </span>
+          </div>
+
+          <!-- Specs details -->
+          <div class="mt-3 grid grid-cols-3 gap-1 py-1.5 px-2 rounded-lg bg-medPanel text-[11px] font-mono border border-medBorder/50">
+            <div>
+              <span class="text-slate-500 block text-[9px]">SBC CHIP</span>
+              <span class="text-slate-300 font-semibold">RPi Zero 2 W</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">DATABASE</span>
+              <span class="text-slate-300 font-semibold">SQLite ext4</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block text-[9px]">HOTSPOT AP</span>
+              <span class="text-slate-300 font-semibold">SteadySpoon_4A1</span>
+            </div>
+          </div>
+
+          <!-- Telemetry readouts -->
+          <div class="mt-3 space-y-2.5 font-mono text-xs">
+            <!-- Power Bank gauge -->
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <span class="text-slate-400 flex items-center gap-1.5">
+                  <i data-lucide="shield-check" class="w-3.5 h-3.5 text-indigo-400"></i>
+                  10,000mAh Power Bank
+                </span>
+                <span class="text-slate-200 font-semibold">5.12V • 72%</span>
+              </div>
+              <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+                <div class="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" style="width: 72%;"></div>
+              </div>
+            </div>
+
+            <!-- MicroSD Disk & Ingest Queue -->
+            <div class="grid grid-cols-2 gap-2 pt-1 border-t border-medBorder/60">
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="database" class="w-3 h-3 text-accentViolet"></i>
+                  MicroSD Storage
+                </div>
+                <div class="text-sm font-semibold text-slate-200">
+                  <span id="diskUsage">14.2</span> / 32 GB
+                </div>
+                <span class="text-[9px] text-slate-400">44.3% • ~480h log left</span>
+              </div>
+
+              <div class="bg-medDark/60 p-2 rounded-lg border border-medBorder/40">
+                <div class="text-[10px] text-slate-400 flex items-center gap-1 mb-0.5">
+                  <i data-lucide="inbox" class="w-3 h-3 text-accentEmerald"></i>
+                  Active Ingest Queue
+                </div>
+                <div class="text-sm font-semibold text-accentEmerald">
+                  Synced (0 drop)
+                </div>
+                <span class="text-[9px] text-slate-400">100% DB write integrity</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- 3. LIVE STABILIZATION & TELEMETRY VISUALIZER -->
+    <!-- ======================================================================= -->
+    <section class="grid grid-cols-1 xl:grid-cols-12 gap-6" id="liveCanvasSection">
+      
+      <!-- LEFT/CENTER: 2D Dynamic Gimbal Canvas & Servo Offsets (7 Cols) -->
+      <div class="xl:col-span-7 space-y-4">
+        
+        <div class="bg-medCard border border-medBorder rounded-2xl p-5 shadow-xl relative">
+          <!-- Card Header & Canvas Mode Controls -->
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-bold text-base text-slate-100 flex items-center gap-2">
+                  <i data-lucide="view" class="w-5 h-5 text-accentCyan"></i>
+                  Dynamic 2D Gimbal Physics Visualizer
+                </h3>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-950 text-accentCyan border border-cyan-800">
+                  60 FPS Kinematics
+                </span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">
+                Real-time hand tremor deflection (red) vs. active counter-torque servo gimbal (cyan) to maintain level bowl (emerald).
+              </p>
+            </div>
+
+            <!-- Active Stabilization Switch -->
+            <div class="flex items-center gap-2 bg-medDark px-3 py-1.5 rounded-xl border border-medBorder">
+              <label for="stabilizationToggle" class="text-xs font-mono text-slate-300 cursor-pointer select-none">
+                Stabilization:
+              </label>
+              <button id="stabilizationToggle" onclick="toggleActiveStabilization()" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-accentEmerald focus:outline-none focus:ring-2 focus:ring-accentEmerald">
+                <span id="stabilizationToggleThumb" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-6"></span>
+              </button>
+              <span id="stabilizationToggleLabel" class="text-xs font-mono font-bold text-accentEmerald w-9">ON</span>
+            </div>
+          </div>
+
+          <!-- The HTML5 Canvas -->
+          <div class="relative w-full rounded-xl overflow-hidden bg-gradient-to-b from-medDark to-slate-950 border border-slate-800/90 shadow-inner">
+            <canvas id="gimbalCanvas" width="900" height="380" class="w-full h-[320px] sm:h-[380px] block cursor-crosshair"></canvas>
+            
+            <!-- Canvas HUD Badges -->
+            <div class="absolute top-3 left-3 flex flex-col gap-1.5 pointer-events-none">
+              <div class="bg-medDark/90 backdrop-blur border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span class="text-slate-400">Hand Tremor:</span>
+                <span id="hudHandAngle" class="text-rose-400 font-bold">+12.4°</span>
+              </div>
+              <div class="bg-medDark/90 backdrop-blur border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-accentCyan"></span>
+                <span class="text-slate-400">Servo Counter:</span>
+                <span id="hudServoAngle" class="text-cyan-400 font-bold">-11.9°</span>
+              </div>
+              <div class="bg-medDark/90 backdrop-blur border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] font-mono flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-accentEmerald"></span>
+                <span class="text-slate-400">Residual Bowl:</span>
+                <span id="hudBowlAngle" class="text-emerald-400 font-bold">+0.5°</span>
+              </div>
+            </div>
+
+            <!-- Spillage Warning HUD -->
+            <div class="absolute top-3 right-3 flex flex-col items-end gap-1.5 pointer-events-none">
+              <div id="spillAlertBox" class="bg-emerald-950/80 backdrop-blur border border-emerald-500/50 rounded-lg px-3 py-1.5 text-xs font-mono flex items-center gap-2 text-emerald-300">
+                <i data-lucide="soup" class="w-4 h-4 text-emerald-400"></i>
+                <span id="spillAlertText">Liquid Stability: Safe (94%)</span>
+              </div>
+              <div class="text-[10px] font-mono text-slate-500 bg-medDark/80 px-2 py-0.5 rounded border border-slate-800">
+                Spills Avoided: <span id="hudSpillCount" class="text-slate-200 font-bold">19</span>
+              </div>
+            </div>
+
+            <!-- Canvas view options footer -->
+            <div class="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[11px] font-mono text-slate-400 bg-medDark/85 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800">
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" id="showVectorsCheck" checked class="rounded bg-slate-800 border-slate-700 text-accentCyan focus:ring-0">
+                  <span>Force Vectors</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" id="showFluidCheck" checked class="rounded bg-slate-800 border-slate-700 text-accentCyan focus:ring-0">
+                  <span>Fluid Sloshing</span>
+                </label>
+                <label class="flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" id="showHorizonCheck" checked class="rounded bg-slate-800 border-slate-700 text-accentCyan focus:ring-0">
+                  <span>Earth Horizon</span>
+                </label>
+              </div>
+              <div class="flex items-center gap-1">
+                <span>View:</span>
+                <button id="viewPitchBtn" onclick="setGimbalView('pitch')" class="px-2 py-0.5 rounded bg-cyan-950 text-accentCyan border border-cyan-800">Pitch (Sagittal)</button>
+                <button id="viewRollBtn" onclick="setGimbalView('roll')" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700">Roll (Coronal)</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dual Servo Angle Indicators (-25° to +25°) -->
+          <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            
+            <!-- Pitch Servo Gauge -->
+            <div class="bg-medPanel p-3 rounded-xl border border-medBorder">
+              <div class="flex justify-between items-center text-xs font-mono mb-1.5">
+                <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                  <i data-lucide="move-vertical" class="w-3.5 h-3.5 text-accentCyan"></i>
+                  MG92B Pitch Correction
+                </span>
+                <span class="text-accentCyan font-bold text-sm" id="gaugePitchValue">-11.9°</span>
+              </div>
+              <!-- Dual polarity bar: left for negative, right for positive -->
+              <div class="relative w-full h-3 rounded bg-slate-900 overflow-hidden flex">
+                <div class="w-1/2 h-full flex justify-end">
+                  <div id="gaugePitchBarNeg" class="h-full bg-cyan-500 rounded-l transition-all duration-75" style="width: 47%;"></div>
+                </div>
+                <div class="w-[2px] h-full bg-slate-500 z-10"></div>
+                <div class="w-1/2 h-full flex justify-start">
+                  <div id="gaugePitchBarPos" class="h-full bg-cyan-500 rounded-r transition-all duration-75" style="width: 0%;"></div>
+                </div>
+              </div>
+              <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+                <span>-25° (Limit)</span>
+                <span>0.0° Level</span>
+                <span>+25° (Limit)</span>
+              </div>
+              <div class="mt-1 flex justify-between text-[10px] font-mono text-slate-400">
+                <span>Torque Load: <strong class="text-slate-300" id="pitchTorque">1.38 kg·cm</strong></span>
+                <span class="text-emerald-400">Kinematic OK</span>
+              </div>
+            </div>
+
+            <!-- Roll Servo Gauge -->
+            <div class="bg-medPanel p-3 rounded-xl border border-medBorder">
+              <div class="flex justify-between items-center text-xs font-mono mb-1.5">
+                <span class="text-slate-300 font-medium flex items-center gap-1.5">
+                  <i data-lucide="move-horizontal" class="w-3.5 h-3.5 text-accentCyan"></i>
+                  MG92B Roll Correction
+                </span>
+                <span class="text-accentCyan font-bold text-sm" id="gaugeRollValue">+4.2°</span>
+              </div>
+              <!-- Dual polarity bar -->
+              <div class="relative w-full h-3 rounded bg-slate-900 overflow-hidden flex">
+                <div class="w-1/2 h-full flex justify-end">
+                  <div id="gaugeRollBarNeg" class="h-full bg-teal-500 rounded-l transition-all duration-75" style="width: 0%;"></div>
+                </div>
+                <div class="w-[2px] h-full bg-slate-500 z-10"></div>
+                <div class="w-1/2 h-full flex justify-start">
+                  <div id="gaugeRollBarPos" class="h-full bg-teal-500 rounded-r transition-all duration-75" style="width: 17%;"></div>
+                </div>
+              </div>
+              <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+                <span>-25° (Limit)</span>
+                <span>0.0° Level</span>
+                <span>+25° (Limit)</span>
+              </div>
+              <div class="mt-1 flex justify-between text-[10px] font-mono text-slate-400">
+                <span>Torque Load: <strong class="text-slate-300" id="rollTorque">0.82 kg·cm</strong></span>
+                <span class="text-emerald-400">Kinematic OK</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Dual-Stream Real-Time Charts (5 Cols) -->
+      <div class="xl:col-span-5 space-y-4">
+        
+        <!-- WAVEFORM CHART 1: Tremor vs. Residual -->
+        <div class="bg-medCard border border-medBorder rounded-2xl p-4 shadow-xl">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h3 class="font-bold text-xs uppercase tracking-wider font-mono text-slate-200 flex items-center gap-2">
+                <i data-lucide="activity" class="w-4 h-4 text-accentRose"></i>
+                Waveform 1: Ring IMU vs Residual Spoon Deflection
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                Temporal deflection (°): Raw hand tremor overlaid with stabilized bowl motion
+              </p>
+            </div>
+            <!-- Suppression metric pill -->
+            <div class="bg-emerald-950/70 border border-emerald-500/40 px-2.5 py-1 rounded-lg text-right">
+              <span class="block text-[9px] uppercase font-mono text-emerald-400">Suppression</span>
+              <span id="liveSuppressionRate" class="text-xs font-mono font-bold text-accentEmerald">88.4%</span>
+            </div>
+          </div>
+
+          <div class="h-[175px] w-full relative">
+            <canvas id="waveformChart1"></canvas>
+          </div>
+
+          <div class="mt-2 pt-2 border-t border-medBorder/60 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <div class="flex items-center gap-4">
+              <span class="flex items-center gap-1.5">
+                <span class="w-3 h-1 bg-rose-500 rounded"></span>
+                <span>Hand Tremor (BMI270)</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="w-3 h-1 bg-emerald-400 rounded"></span>
+                <span>Residual Spoon (MPU6050)</span>
+              </span>
+            </div>
+            <div class="text-slate-300">
+              Attenuation: <strong class="text-accentEmerald" id="attenuationDb">-18.7 dB</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- WAVEFORM CHART 2: Active Servo Angle & Peak FFT Frequency -->
+        <div class="bg-medCard border border-medBorder rounded-2xl p-4 shadow-xl">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h3 class="font-bold text-xs uppercase tracking-wider font-mono text-slate-200 flex items-center gap-2">
+                <i data-lucide="waveform" class="w-4 h-4 text-accentCyan"></i>
+                Waveform 2: Active Servo Correction & FFT Spectrum
+              </h3>
+              <p class="text-[11px] text-slate-400">
+                Servo counter-rotation output & dominant spectral peak (Parkinson's 4–7 Hz band)
+              </p>
+            </div>
+            <!-- Live FFT Peak Frequency Pill -->
+            <div class="bg-cyan-950/70 border border-cyan-500/40 px-2.5 py-1 rounded-lg text-right">
+              <span class="block text-[9px] uppercase font-mono text-accentCyan">Peak Tremor</span>
+              <span id="liveFftPeak" class="text-xs font-mono font-bold text-cyan-300">4.8 Hz</span>
+            </div>
+          </div>
+
+          <div class="h-[175px] w-full relative">
+            <canvas id="waveformChart2"></canvas>
+          </div>
+
+          <div class="mt-2 pt-2 border-t border-medBorder/60 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <div class="flex items-center gap-4">
+              <span class="flex items-center gap-1.5">
+                <span class="w-3 h-1 bg-cyan-400 rounded"></span>
+                <span>Servo Gimbal Offset (deg)</span>
+              </span>
+              <span class="flex items-center gap-1.5">
+                <span class="w-3 h-1 bg-amber-400 rounded"></span>
+                <span>FFT Spectral Power (a.u.)</span>
+              </span>
+            </div>
+            <div class="text-slate-300">
+              Tremor Band: <strong class="text-amber-400" id="tremorBandLabel">Parkinsonian (4-6Hz)</strong>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- 4. TREMOR SIMULATION & CONTROL MATRIX -->
+    <!-- ======================================================================= -->
+    <section class="bg-medCard border border-medBorder rounded-2xl p-5 shadow-xl" id="controlMatrix">
+      <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-medBorder">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider font-mono text-slate-200 flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-accentAmber"></i>
+            Tremor Simulation & Pathophysiological Control Matrix
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">
+            Tweak real-time biophysical tremor dynamics to stress-test the ESP32 PID loop and evaluate clinician presets.
+          </p>
+        </div>
+
+        <!-- One-Click Clinical Presets -->
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs font-mono text-slate-400 mr-1">Clinical Presets:</span>
+          
+          <button onclick="applyPreset('mild')" class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-medPanel hover:bg-slate-800 text-slate-300 border border-medBorder transition hover:border-emerald-500/50">
+            Resting Mild (4.2 Hz)
+          </button>
+          
+          <button onclick="applyPreset('moderate')" class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-medPanel hover:bg-slate-800 text-amber-300 border border-medBorder transition hover:border-amber-500/50">
+            Postural Moderate (5.5 Hz)
+          </button>
+          
+          <button onclick="applyPreset('severe')" class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-medPanel hover:bg-slate-800 text-rose-300 border border-medBorder transition hover:border-rose-500/50">
+            Severe Action (7.0 Hz)
+          </button>
+
+          <button onclick="applyPreset('medicated')" class="px-3 py-1.5 rounded-lg text-xs font-mono font-medium bg-medPanel hover:bg-slate-800 text-cyan-300 border border-medBorder transition hover:border-cyan-500/50">
+            Medicated On-State (3.8 Hz)
+          </button>
+        </div>
+      </div>
+
+      <!-- Sliders Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-5">
+        
+        <!-- Frequency Slider (2.0 to 9.0 Hz) -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs font-mono">
+            <label for="freqSlider" class="text-slate-300 font-semibold flex items-center gap-1.5">
+              <i data-lucide="radio-tower" class="w-3.5 h-3.5 text-accentAmber"></i>
+              Tremor Frequency
+            </label>
+            <span id="freqValueLabel" class="text-accentAmber font-bold text-sm">4.8 Hz</span>
+          </div>
+          <input type="range" id="freqSlider" min="2.0" max="9.0" step="0.1" value="4.8" class="w-full cursor-pointer" oninput="onTremorParamChange()">
+          <div class="flex justify-between text-[10px] font-mono text-slate-500">
+            <span>2.0 Hz (Cerebellar)</span>
+            <span class="text-amber-400">4–6 Hz (Parkinson's)</span>
+            <span>9.0 Hz (Essential)</span>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono" id="freqDiagnosisNote">
+            Classic Parkinsonian resting tremor band.
+          </p>
+        </div>
+
+        <!-- Amplitude Slider (±2° to ±30°) -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs font-mono">
+            <label for="ampSlider" class="text-slate-300 font-semibold flex items-center gap-1.5">
+              <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-accentRose"></i>
+              Tremor Amplitude
+            </label>
+            <span id="ampValueLabel" class="text-accentRose font-bold text-sm">±12.0°</span>
+          </div>
+          <input type="range" id="ampSlider" min="2.0" max="30.0" step="0.5" value="12.0" class="w-full cursor-pointer" oninput="onTremorParamChange()">
+          <div class="flex justify-between text-[10px] font-mono text-slate-500">
+            <span>±2° (Micro)</span>
+            <span>±15° (Moderate)</span>
+            <span>±30° (Severe)</span>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono">
+            Moderate functional impairment during self-feeding.
+          </p>
+        </div>
+
+        <!-- Harmonic Jitter & Noise Slider (0% to 50%) -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs font-mono">
+            <label for="noiseSlider" class="text-slate-300 font-semibold flex items-center gap-1.5">
+              <i data-lucide="shuffle" class="w-3.5 h-3.5 text-accentCyan"></i>
+              Biological Irregularity
+            </label>
+            <span id="noiseValueLabel" class="text-accentCyan font-bold text-sm">18%</span>
+          </div>
+          <input type="range" id="noiseSlider" min="0" max="50" step="1" value="18" class="w-full cursor-pointer" oninput="onTremorParamChange()">
+          <div class="flex justify-between text-[10px] font-mono text-slate-500">
+            <span>0% (Synthetic Sin)</span>
+            <span>25% (Realistic)</span>
+            <span>50% (High Jitter)</span>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono">
+            Adds multi-harmonic frequencies and random muscle twitch.
+          </p>
+        </div>
+
+        <!-- Voluntary Eating Trajectory Simulation Toggle -->
+        <div class="space-y-2 bg-medPanel p-3.5 rounded-xl border border-medBorder/70">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-mono text-slate-200 font-semibold flex items-center gap-1.5">
+              <i data-lucide="hand" class="w-3.5 h-3.5 text-emerald-400"></i>
+              Voluntary Meal Motion
+            </span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="voluntaryMotionCheck" onchange="onTremorParamChange()" class="sr-only peer" checked>
+              <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accentEmerald"></div>
+            </label>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono leading-relaxed">
+            Simulates slow voluntary dipping/lifting (0.12 Hz) to demonstrate high-pass filter isolation of intentional eating vs tremor.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- 5. SESSION HISTORY & LONGITUDINAL ANALYTICS -->
+    <!-- ======================================================================= -->
+    <section class="space-y-6">
+      
+      <!-- Longitudinal Trend Chart: Medication On/Off Cycles -->
+      <div class="bg-medCard border border-medBorder rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-medBorder gap-2">
+          <div>
+            <h3 class="text-sm font-bold uppercase tracking-wider font-mono text-slate-200 flex items-center gap-2">
+              <i data-lucide="calendar" class="w-4 h-4 text-accentViolet"></i>
+              Longitudinal Tremor Severity & Levodopa On/Off Diurnal Cycling
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Mealtime tremor amplitude across Breakfast, Lunch, and Dinner (past 7 days) evaluating pharmaceutical efficacy.
+            </p>
+          </div>
+          
+          <div class="flex items-center gap-3 text-xs font-mono">
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-indigo-500"></span>
+              <span class="text-slate-300">Breakfast (Pre-dose peak)</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-emerald-500"></span>
+              <span class="text-slate-300">Lunch (Optimal ON)</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+              <span class="w-3 h-3 rounded-sm bg-amber-500"></span>
+              <span class="text-slate-300">Dinner (Wearing-OFF)</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="h-[220px] w-full mt-4">
+          <canvas id="longitudinalChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Past Sessions Logged by Raspberry Pi (Data Table) -->
+      <div class="bg-medCard border border-medBorder rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-medBorder gap-4">
+          <div>
+            <h3 class="text-sm font-bold uppercase tracking-wider font-mono text-slate-200 flex items-center gap-2">
+              <i data-lucide="table" class="w-4 h-4 text-accentCyan"></i>
+              Raspberry Pi Meal Session Telemetry Archive
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Synchronized SQLite database logs recorded on the 32GB industrial microSD card.
+            </p>
+          </div>
+
+          <!-- Table Controls: Meal filter and search -->
+          <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <div class="flex bg-medPanel rounded-lg p-0.5 border border-medBorder">
+              <button onclick="filterSessionTable('all')" id="filterBtnAll" class="px-2.5 py-1 rounded-md bg-accentCyan text-slate-900 font-bold transition">All</button>
+              <button onclick="filterSessionTable('breakfast')" id="filterBtnBreakfast" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">Breakfast</button>
+              <button onclick="filterSessionTable('lunch')" id="filterBtnLunch" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">Lunch</button>
+              <button onclick="filterSessionTable('dinner')" id="filterBtnDinner" class="px-2.5 py-1 rounded-md text-slate-400 hover:text-slate-200 transition">Dinner</button>
+            </div>
+            <input type="text" id="sessionSearchInput" oninput="searchSessionTable()" placeholder="Search notes/ID..." class="px-3 py-1.5 rounded-lg bg-medPanel border border-medBorder text-slate-200 placeholder-slate-500 focus:outline-none focus:border-accentCyan">
+          </div>
+        </div>
+
+        <!-- Interactive Data Table -->
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono whitespace-nowrap">
+            <thead>
+              <tr class="text-slate-400 border-b border-medBorder/80 bg-medPanel/50">
+                <th class="py-3 px-4 font-semibold">Session ID / Timestamp</th>
+                <th class="py-3 px-3 font-semibold">Meal Type</th>
+                <th class="py-3 px-3 font-semibold">Duration</th>
+                <th class="py-3 px-3 font-semibold">Suppression Ratio</th>
+                <th class="py-3 px-3 font-semibold">Mean Freq</th>
+                <th class="py-3 px-3 font-semibold">Spoonfuls</th>
+                <th class="py-3 px-3 font-semibold">Spills Prevented</th>
+                <th class="py-3 px-4 font-semibold">Clinician Notes</th>
+                <th class="py-3 px-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="sessionTableBody" class="divide-y divide-medBorder/50">
+              <!-- Dynamically populated via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Table pagination & summary -->
+        <div class="mt-4 flex flex-col sm:flex-row items-center justify-between text-xs font-mono text-slate-400 pt-3 border-t border-medBorder/60 gap-2">
+          <span id="sessionTableCount">Showing 6 recorded meal sessions</span>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-500">Auto-synced to edge DB: <strong class="text-emerald-400 font-semibold">Active</strong></span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODALS & TOAST NOTIFICATION CONTAINER -->
+  <!-- ========================================================================= -->
+
+  <!-- Session Inspection & Clinical Report Modal (Native Accessible HTML5 Dialog) -->
+  <dialog id="sessionModal" class="bg-transparent backdrop:bg-black/80 backdrop:backdrop-blur-sm p-0 rounded-2xl max-w-3xl w-full mx-auto my-auto shadow-2xl border border-medBorder focus:outline-none">
+    <div class="bg-medCard text-slate-100 rounded-2xl border border-medBorder overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-medBorder bg-medPanel flex items-start justify-between">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 rounded-xl bg-cyan-950 border border-cyan-800 text-accentCyan">
+            <i data-lucide="clipboard-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 id="modalSessionTitle" class="text-base font-bold text-slate-100 font-mono">Session Inspection: SS-2026-1102-01</h3>
+              <span id="modalMealBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-950 text-accentEmerald border border-emerald-800">Lunch</span>
+            </div>
+            <p id="modalSessionTimestamp" class="text-xs text-slate-400 font-mono mt-0.5">Recorded: Today, 12:45 PM • Patient: Elena Rostova (71y)</p>
+          </div>
+        </div>
+        <button onclick="closeSessionModal()" class="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        
+        <!-- Summary Cards Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+          <div class="bg-medDark/80 p-3 rounded-xl border border-medBorder">
+            <span class="text-slate-400 block text-[10px]">SUPPRESSION RATIO</span>
+            <span id="modalSuppression" class="text-accentEmerald text-lg font-bold">88.4%</span>
+            <span class="text-[10px] text-slate-500 block">Attenuation: -18.7 dB</span>
+          </div>
+
+          <div class="bg-medDark/80 p-3 rounded-xl border border-medBorder">
+            <span class="text-slate-400 block text-[10px]">DOMINANT FREQ</span>
+            <span id="modalFrequency" class="text-amber-400 text-lg font-bold">4.8 Hz</span>
+            <span class="text-[10px] text-slate-500 block">Resting Tremor</span>
+          </div>
+
+          <div class="bg-medDark/80 p-3 rounded-xl border border-medBorder">
+            <span class="text-slate-400 block text-[10px]">SPOONFUL COUNT</span>
+            <span id="modalSpoonfuls" class="text-cyan-400 text-lg font-bold">42 bites</span>
+            <span class="text-[10px] text-slate-500 block">Mean cycle: 34s</span>
+          </div>
+
+          <div class="bg-medDark/80 p-3 rounded-xl border border-medBorder">
+            <span class="text-slate-400 block text-[10px]">SPILLS PREVENTED</span>
+            <span id="modalSpills" class="text-indigo-400 text-lg font-bold">19 events</span>
+            <span class="text-[10px] text-emerald-400 block">0 actual spills</span>
+          </div>
+        </div>
+
+        <!-- Hardware & Algorithmic Diagnostics -->
+        <div class="bg-medPanel p-4 rounded-xl border border-medBorder space-y-3 text-xs font-mono">
+          <h4 class="font-bold text-slate-300 flex items-center gap-2">
+            <i data-lucide="microchip" class="w-4 h-4 text-accentCyan"></i>
+            Hardware Loop & Sensor Kinematic Trace
+          </h4>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px]">
+            <div>
+              <span class="text-slate-500 block">ESP32 Loop Jitter</span>
+              <span class="text-slate-300 font-semibold">&plusmn; 0.62 ms (200.4 Hz)</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">BMI270 FIFO Overflow</span>
+              <span class="text-emerald-400 font-semibold">0 drops (100% integrity)</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Max Servo Deflection</span>
+              <span class="text-slate-300 font-semibold">Pitch: -19.4° / Roll: +8.2°</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Servo Thermal Peak</span>
+              <span class="text-slate-300 font-semibold">37.8°C (Safe limit 65°C)</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Active Battery Drain</span>
+              <span class="text-slate-300 font-semibold">142 mAh total session</span>
+            </div>
+            <div>
+              <span class="text-slate-500 block">Raspberry Pi Storage</span>
+              <span class="text-slate-300 font-semibold">4.8 MB telemetry payload</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Clinician Assessment Notes Area -->
+        <div class="space-y-2">
+          <label for="modalNotesInput" class="block text-xs font-mono font-semibold text-slate-300">
+            Clinician / Patient Assessment Notes
+          </label>
+          <textarea id="modalNotesInput" rows="3" class="w-full bg-medDark border border-medBorder rounded-xl p-3 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-accentCyan"></textarea>
+          <div class="flex justify-between items-center text-[10px] font-mono text-slate-500">
+            <span>Notes automatically appended to patient EHR record.</span>
+            <button onclick="saveModalNotes()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-accentCyan rounded border border-slate-700 transition">Save Note</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer Actions -->
+      <div class="p-4 border-t border-medBorder bg-medPanel flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div class="flex items-center gap-2">
+          <button onclick="downloadSessionJSON()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-medDark hover:bg-slate-800 text-slate-200 border border-medBorder transition hover:border-accentCyan">
+            <i data-lucide="file-json" class="w-4 h-4 text-accentCyan"></i>
+            <span>Download JSON</span>
+          </button>
+          <button onclick="downloadSessionCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-medDark hover:bg-slate-800 text-slate-200 border border-medBorder transition hover:border-accentEmerald">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-accentEmerald"></i>
+            <span>Download CSV</span>
+          </button>
+          <button onclick="printClinicalReportFromModal()" class="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-medDark hover:bg-slate-800 text-slate-200 border border-medBorder transition hover:border-accentViolet">
+            <i data-lucide="printer" class="w-4 h-4 text-accentViolet"></i>
+            <span>Print Report</span>
+          </button>
+        </div>
+        <button onclick="closeSessionModal()" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </dialog>
+
+  <!-- Gimbal Calibration Progress Modal -->
+  <dialog id="calibrationModal" class="bg-transparent backdrop:bg-black/80 backdrop:backdrop-blur-sm p-0 rounded-2xl max-w-md w-full mx-auto my-auto shadow-2xl border border-medBorder focus:outline-none">
+    <div class="bg-medCard text-slate-100 rounded-2xl border border-medBorder p-6 text-center space-y-4">
+      <div class="relative w-16 h-16 mx-auto flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full border-4 border-cyan-500/20 border-t-accentCyan animate-spin"></div>
+        <i data-lucide="compass" class="w-7 h-7 text-accentCyan"></i>
+      </div>
+      <div>
+        <h3 class="text-base font-bold font-mono text-slate-100">Zero-Calibrating Gimbal</h3>
+        <p class="text-xs text-slate-400 font-mono mt-1" id="calibrationStepText">Reading MPU6050 stationary zero-g offset...</p>
+      </div>
+      <div class="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
+        <div id="calibrationProgressBar" class="h-full bg-accentCyan transition-all duration-300" style="width: 25%;"></div>
+      </div>
+      <p class="text-[10px] font-mono text-slate-500">
+        Please keep the SteadySpoon handle resting on a flat surface or hold steady.
+      </p>
+    </div>
+  </dialog>
+
+  <!-- Floating Toast Notifications -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- PRINT-ONLY CLINICAL SUMMARY VIEW -->
+  <div id="printReportView" class="hidden p-8 font-sans text-slate-900 bg-white">
+    <div class="border-b-2 border-slate-900 pb-4 mb-6">
+      <h1 class="text-2xl font-bold">SteadySpoon Medical — Clinical Telemetry Summary Report</h1>
+      <p class="text-sm text-slate-600">IoT Assistive Dynamic Stabilization Telemetry for Parkinson's Disease</p>
+    </div>
+    <div class="grid grid-cols-2 gap-4 mb-6 text-sm">
+      <div>
+        <p><strong>Patient:</strong> Elena Rostova (71y female)</p>
+        <p><strong>Diagnosis:</strong> Idiopathic Parkinson's Disease (Hoehn & Yahr Stage 2.5)</p>
+        <p><strong>Medication:</strong> Levodopa / Carbidopa 100/25 mg</p>
+      </div>
+      <div>
+        <p><strong>Report Generated:</strong> <span id="printDate">2026-11-02 12:50</span></p>
+        <p><strong>Hardware:</strong> SteadySpoon ESP32 v2.4 + Raytac MDBT42Q</p>
+        <p><strong>Central Hub:</strong> Raspberry Pi Zero 2 W (Firmware 3.1.2)</p>
+      </div>
+    </div>
+    <div class="mb-6">
+      <h2 class="text-lg font-bold border-b border-slate-300 pb-1 mb-3">Longitudinal Efficacy Overview</h2>
+      <p class="text-sm mb-2">Mean Tremor Suppression Ratio across all meals: <strong>87.2%</strong>. Spillage incidence reduced by <strong>96%</strong> compared to unassisted baseline.</p>
+      <table class="w-full text-left text-sm border-collapse border border-slate-300">
+        <thead>
+          <tr class="bg-slate-100">
+            <th class="border border-slate-300 p-2">Session ID</th>
+            <th class="border border-slate-300 p-2">Meal</th>
+            <th class="border border-slate-300 p-2">Duration</th>
+            <th class="border border-slate-300 p-2">Suppression %</th>
+            <th class="border border-slate-300 p-2">Tremor Freq</th>
+            <th class="border border-slate-300 p-2">Spoonfuls</th>
+            <th class="border border-slate-300 p-2">Spills Avoided</th>
+          </tr>
+        </thead>
+        <tbody id="printTableBody">
+          <!-- Populated before print -->
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-8 pt-4 border-t border-slate-300 text-xs text-slate-500 flex justify-between">
+      <span>Physician Signature: ___________________________</span>
+      <span>SteadySpoon Medical Telemetry Cloud • HIPAA / GDPR Compliant</span>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT TELEMETRY ENGINE & UI LOGIC -->
+  <!-- ========================================================================= -->
+  <script>
+    // -------------------------------------------------------------------------
+    // 1. GLOBAL STATE & TELEMETRY MODEL
+    // -------------------------------------------------------------------------
+    const state = {
+      // Simulation parameters
+      tremorFreq: 4.8,       // Hz (Parkinsonian band: 4-6 Hz)
+      tremorAmp: 12.0,       // Degrees peak amplitude
+      noiseLevel: 18,        // % biological irregularity
+      voluntaryMotion: true, // 0.12 Hz voluntary meal trajectory
+      activeStabilization: true, // Active counter-gimbal servos enabled
+      gimbalView: 'pitch',   // 'pitch' or 'roll'
+
+      // Real-time kinematic telemetry
+      t: 0,
+      handAngle: 0,
+      servoPitchAngle: 0,
+      servoRollAngle: 0,
+      spoonBowlAngle: 0,
+      sloshAngle: 0,
+      sloshVelocity: 0,
+      spillsAvoided: 19,
+      isSpilling: false,
+
+      // Live Meal Session
+      sessionActive: false,
+      sessionStartTime: 0,
+      sessionTimerInterval: null,
+      sessionSeconds: 0,
+      sessionBiteCount: 0,
+      sessionSpillCount: 0,
+      sessionSuppressionSum: 0,
+      sessionSampleCount: 0,
+
+      // Hardware metrics
+      spoonBatteryV: 7.82,
+      spoonBatteryPct: 84,
+      spoonLoopFreq: 200.4,
+      ringRssi: -56,
+      audioEnabled: false,
+
+      // Zero calibration offset
+      pitchZeroOffset: 0.0,
+      rollZeroOffset: 0.0
+    };
+
+    // Past Logged Sessions (Raspberry Pi SQLite store)
+    let pastSessions = [
+      {
+        id: "SS-2026-1102-01",
+        date: "2026-11-02 12:45",
+        timestamp: "Today, 12:45 PM",
+        meal: "Lunch",
+        duration: "22m 14s",
+        durationSec: 1334,
+        suppressionRatio: 88.4,
+        meanFreq: 4.8,
+        spoonfulCount: 42,
+        spillsPrevented: 19,
+        notes: "Levodopa 25/100mg taken 45m prior. Smooth eating cadence, soup intake successful."
+      },
+      {
+        id: "SS-2026-1102-02",
+        date: "2026-11-02 08:15",
+        timestamp: "Today, 08:15 AM",
+        meal: "Breakfast",
+        duration: "18m 40s",
+        durationSec: 1120,
+        suppressionRatio: 82.1,
+        meanFreq: 5.4,
+        spoonfulCount: 31,
+        spillsPrevented: 24,
+        notes: "Early morning wearing-off stage before morning Sinemet. High tremor amplitude (±18°), stabilized safely."
+      },
+      {
+        id: "SS-2026-1101-03",
+        date: "2026-11-01 19:30",
+        timestamp: "Yesterday, 07:30 PM",
+        meal: "Dinner",
+        duration: "25m 05s",
+        durationSec: 1505,
+        suppressionRatio: 85.9,
+        meanFreq: 4.9,
+        spoonfulCount: 46,
+        spillsPrevented: 18,
+        notes: "Patient reported relaxed grip. No fatigue in forearm observed."
+      },
+      {
+        id: "SS-2026-1101-02",
+        date: "2026-11-01 13:10",
+        timestamp: "Yesterday, 01:10 PM",
+        meal: "Lunch",
+        duration: "20m 12s",
+        durationSec: 1212,
+        suppressionRatio: 89.2,
+        meanFreq: 4.6,
+        spoonfulCount: 39,
+        spillsPrevented: 15,
+        notes: "Optimal medication on-phase. Minimal residual bowl motion (< 0.4°)."
+      },
+      {
+        id: "SS-2026-1101-01",
+        date: "2026-11-01 08:25",
+        timestamp: "Yesterday, 08:25 AM",
+        meal: "Breakfast",
+        duration: "19m 30s",
+        durationSec: 1170,
+        suppressionRatio: 83.5,
+        meanFreq: 5.2,
+        spoonfulCount: 34,
+        spillsPrevented: 22,
+        notes: "Porridge breakfast. 100% stabilization integrity."
+      },
+      {
+        id: "SS-2026-1031-03",
+        date: "2026-10-31 19:45",
+        timestamp: "Oct 31, 07:45 PM",
+        meal: "Dinner",
+        duration: "24m 18s",
+        durationSec: 1458,
+        suppressionRatio: 86.4,
+        meanFreq: 4.8,
+        spoonfulCount: 44,
+        spillsPrevented: 20,
+        notes: "Evening meal with family. Patient conveyed high confidence in dining."
+      }
+    ];
+
+    let selectedSession = pastSessions[0];
+
+    // -------------------------------------------------------------------------
+    // 2. WEB AUDIO SYNTHESIZER (Telemetry Audio Feedback)
+    // -------------------------------------------------------------------------
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContext();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playTone(freq, type = 'sine', duration = 0.08, gainVal = 0.04) {
+      if (!state.audioEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(gainVal, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+      } catch (e) {
+        console.warn("Audio not initialized:", e);
+      }
+    }
+
+    function toggleAudioTelemetry() {
+      state.audioEnabled = !state.audioEnabled;
+      const icon = document.getElementById('audioIcon');
+      const label = document.getElementById('audioLabel');
+      if (state.audioEnabled) {
+        getAudioContext();
+        icon.setAttribute('data-lucide', 'volume-2');
+        icon.className = 'w-3.5 h-3.5 text-accentCyan';
+        label.innerText = 'Audio On';
+        showToast("Audio Telemetry Feedback Enabled", "info");
+        playTone(660, 'sine', 0.15, 0.08);
+      } else {
+        icon.setAttribute('data-lucide', 'volume-x');
+        icon.className = 'w-3.5 h-3.5 text-slate-500';
+        label.innerText = 'Audio Muted';
+        showToast("Audio Telemetry Muted", "info");
+      }
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. TOAST NOTIFICATION SYSTEM
+    // -------------------------------------------------------------------------
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      
+      let borderCol = 'border-accentCyan';
+      let textCol = 'text-accentCyan';
+      let iconName = 'info';
+
+      if (type === 'success') {
+        borderCol = 'border-accentEmerald';
+        textCol = 'text-accentEmerald';
+        iconName = 'check-circle-2';
+      } else if (type === 'warning') {
+        borderCol = 'border-accentAmber';
+        textCol = 'text-accentAmber';
+        iconName = 'alert-triangle';
+      } else if (type === 'error') {
+        borderCol = 'border-accentRose';
+        textCol = 'text-accentRose';
+        iconName = 'alert-octagon';
+      }
+
+      toast.className = `flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-medCard/95 backdrop-blur-md border ${borderCol} shadow-2xl text-xs font-mono text-slate-200 transition-all duration-300 transform translate-y-3 opacity-0`;
+      toast.innerHTML = `
+        <i data-lucide="${iconName}" class="w-4 h-4 ${textCol} shrink-0"></i>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-x-4');
+        setTimeout(() => toast.remove(), 350);
+      }, 3500);
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. CHART.JS REAL-TIME DUAL TELEMETRY STREAMS
+    // -------------------------------------------------------------------------
+    const MAX_CHART_POINTS = 50;
+    let waveformChart1, waveformChart2, longitudinalChart;
+
+    function initCharts() {
+      const labels = Array.from({ length: MAX_CHART_POINTS }, (_, i) => `-${((MAX_CHART_POINTS - i) * 0.1).toFixed(1)}s`);
+      const zeroData = Array(MAX_CHART_POINTS).fill(0);
+
+      // Waveform Chart 1: Raw Hand Tremor vs Residual Spoon
+      const ctx1 = document.getElementById('waveformChart1').getContext('2d');
+      waveformChart1 = new Chart(ctx1, {
+        type: 'line',
+        data: {
+          labels: [...labels],
+          datasets: [
+            {
+              label: 'Raw Hand Tremor (°)',
+              data: [...zeroData],
+              borderColor: '#f43f5e',
+              borderWidth: 2,
+              backgroundColor: 'rgba(244, 63, 94, 0.06)',
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0
+            },
+            {
+              label: 'Residual Spoon (°)',
+              data: [...zeroData],
+              borderColor: '#10b981',
+              borderWidth: 2.2,
+              backgroundColor: 'rgba(16, 185, 129, 0.12)',
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              enabled: true,
+              backgroundColor: '#131b2e',
+              borderColor: '#1e293b',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono', size: 11 },
+              bodyFont: { family: 'JetBrains Mono', size: 10 }
+            }
+          },
+          scales: {
+            x: {
+              display: false
+            },
+            y: {
+              min: -25,
+              max: 25,
+              grid: { color: 'rgba(30, 41, 59, 0.7)' },
+              ticks: {
+                color: '#64748b',
+                font: { family: 'JetBrains Mono', size: 9 },
+                stepSize: 10,
+                callback: v => `${v}°`
+              }
+            }
+          }
+        }
+      });
+
+      // Waveform Chart 2: Active Servo Angle & Peak FFT
+      const ctx2 = document.getElementById('waveformChart2').getContext('2d');
+      waveformChart2 = new Chart(ctx2, {
+        type: 'line',
+        data: {
+          labels: [...labels],
+          datasets: [
+            {
+              label: 'Servo Offset (°)',
+              data: [...zeroData],
+              borderColor: '#06b6d4',
+              borderWidth: 2,
+              backgroundColor: 'rgba(6, 182, 212, 0.08)',
+              fill: true,
+              tension: 0.35,
+              pointRadius: 0,
+              yAxisID: 'y'
+            },
+            {
+              label: 'FFT Power (Parkinson band)',
+              data: [...zeroData],
+              borderColor: '#f59e0b',
+              borderWidth: 1.5,
+              borderDash: [3, 3],
+              pointRadius: 0,
+              tension: 0.2,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: { display: false },
+            y: {
+              type: 'linear',
+              position: 'left',
+              min: -25,
+              max: 25,
+              grid: { color: 'rgba(30, 41, 59, 0.7)' },
+              ticks: {
+                color: '#06b6d4',
+                font: { family: 'JetBrains Mono', size: 9 },
+                callback: v => `${v}°`
+              }
+            },
+            y1: {
+              type: 'linear',
+              position: 'right',
+              min: 0,
+              max: 100,
+              grid: { display: false },
+              ticks: {
+                color: '#f59e0b',
+                font: { family: 'JetBrains Mono', size: 9 },
+                callback: v => `${v}%`
+              }
+            }
+          }
+        }
+      });
+
+      // Longitudinal Diurnal Trend Chart
+      initLongitudinalChart();
+    }
+
+    function initLongitudinalChart() {
+      const days = ['Mon Oct 27', 'Tue Oct 28', 'Wed Oct 29', 'Thu Oct 30', 'Fri Oct 31', 'Sat Nov 01', 'Sun Nov 02 (Today)'];
+      const breakfastData = [18.2, 19.5, 17.8, 20.1, 18.9, 17.4, 18.0]; // Pre-dose wearing off
+      const lunchData     = [6.8,  7.2,  6.4,  7.9,  6.9,  6.5,  6.2];  // Optimal ON state
+      const dinnerData    = [13.4, 14.1, 13.0, 15.2, 14.5, 13.8, 12.9]; // Evening wearing off
+      const suppressionEff = [86, 85, 87, 84, 86, 89, 88]; // Efficiency %
+
+      const ctxL = document.getElementById('longitudinalChart').getContext('2d');
+      longitudinalChart = new Chart(ctxL, {
+        type: 'bar',
+        data: {
+          labels: days,
+          datasets: [
+            {
+              type: 'line',
+              label: 'Suppression Ratio (%)',
+              data: suppressionEff,
+              borderColor: '#10b981',
+              backgroundColor: '#10b981',
+              borderWidth: 2.5,
+              pointBackgroundColor: '#10b981',
+              pointRadius: 4,
+              yAxisID: 'yEfficiency',
+              tension: 0.3
+            },
+            {
+              type: 'bar',
+              label: 'Breakfast (Pre-dose)',
+              data: breakfastData,
+              backgroundColor: 'rgba(99, 102, 241, 0.75)',
+              borderRadius: 6,
+              yAxisID: 'yTremor'
+            },
+            {
+              type: 'bar',
+              label: 'Lunch (Optimal ON)',
+              data: lunchData,
+              backgroundColor: 'rgba(16, 185, 129, 0.75)',
+              borderRadius: 6,
+              yAxisID: 'yTremor'
+            },
+            {
+              type: 'bar',
+              label: 'Dinner (Wearing OFF)',
+              data: dinnerData,
+              backgroundColor: 'rgba(245, 158, 11, 0.75)',
+              borderRadius: 6,
+              yAxisID: 'yTremor'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#131b2e',
+              borderColor: '#1e293b',
+              borderWidth: 1,
+              titleFont: { family: 'JetBrains Mono' },
+              bodyFont: { family: 'JetBrains Mono' }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(30, 41, 59, 0.5)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+            },
+            yTremor: {
+              type: 'linear',
+              position: 'left',
+              title: { display: true, text: 'Raw Tremor Peak (°)', color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+              grid: { color: 'rgba(30, 41, 59, 0.7)' },
+              ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 }, callback: v => `${v}°` },
+              min: 0,
+              max: 26
+            },
+            yEfficiency: {
+              type: 'linear',
+              position: 'right',
+              title: { display: true, text: 'Suppression %', color: '#10b981', font: { family: 'JetBrains Mono', size: 10 } },
+              grid: { display: false },
+              ticks: { color: '#10b981', font: { family: 'JetBrains Mono', size: 9 }, callback: v => `${v}%` },
+              min: 50,
+              max: 100
+            }
+          }
+        }
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. 2D GIMBAL CANVAS RENDERER & KINEMATICS SIMULATOR
+    // -------------------------------------------------------------------------
+    const canvas = document.getElementById('gimbalCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Fluid sloshing state
+    let fluidMeniscus = 0;
+    let fluidVelocity = 0;
+    const FLUID_DAMPING = 0.94;
+    const FLUID_SPRING = 0.12;
+
+    function renderGimbal() {
+      const width = canvas.width;
+      const height = canvas.height;
+      const centerY = height / 2;
+      const pivotX = width * 0.44;
+
+      // Clear Canvas
+      ctx.clearRect(0, 0, width, height);
+
+      // 1. Grid Background & Earth Horizon
+      ctx.strokeStyle = '#131b2e';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
+      // Earth Horizon Reference Line (0.0° Level)
+      if (document.getElementById('showHorizonCheck').checked) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(20, centerY);
+        ctx.lineTo(width - 20, centerY);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.7)';
+        ctx.font = '10px "JetBrains Mono"';
+        ctx.fillText('0.0° ARTIFICIAL HORIZON (LEVEL)', width - 210, centerY - 6);
+        ctx.restore();
+      }
+
+      // Kinematic angles
+      const currentHandAngleDeg = state.handAngle;
+      const handAngleRad = (currentHandAngleDeg * Math.PI) / 180;
+      
+      // Servo correction
+      const currentServoDeg = state.activeStabilization ? state.servoPitchAngle : 0;
+      const servoAngleRad = (currentServoDeg * Math.PI) / 180;
+
+      // Residual bowl angle
+      const bowlAngleDeg = state.spoonBowlAngle;
+      const bowlAngleRad = (bowlAngleDeg * Math.PI) / 180;
+
+      // -------------------------------------------------------------
+      // DRAW PART 1: User's Trembling Hand & Handle (Left of Pivot)
+      // -------------------------------------------------------------
+      ctx.save();
+      ctx.translate(pivotX, centerY);
+      ctx.rotate(handAngleRad);
+
+      // Tremor vibration glow
+      const tremorIntensity = Math.min(Math.abs(currentHandAngleDeg) / 25, 1.0);
+      const glowColor = tremorIntensity > 0.6 ? 'rgba(244, 63, 94, 0.4)' : 'rgba(245, 158, 11, 0.25)';
+
+      // Handle body (cylindrical ergonomic handle)
+      const handleLen = 220;
+      const handleThickness = 28;
+
+      ctx.shadowColor = glowColor;
+      ctx.shadowBlur = 15;
+
+      // Handle Gradient
+      const handleGrad = ctx.createLinearGradient(-handleLen, -handleThickness/2, 0, handleThickness/2);
+      handleGrad.addColorStop(0, '#1e293b');
+      handleGrad.addColorStop(0.5, '#334155');
+      handleGrad.addColorStop(1, '#1e293b');
+
+      ctx.fillStyle = handleGrad;
+      ctx.strokeStyle = tremorIntensity > 0.5 ? '#f43f5e' : '#64748b';
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.roundRect(-handleLen, -handleThickness/2, handleLen - 15, handleThickness, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      // Ergonomic rubber grip bands
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 3;
+      for (let i = 40; i < handleLen - 30; i += 22) {
+        ctx.beginPath();
+        ctx.moveTo(-i, -handleThickness/2 + 2);
+        ctx.lineTo(-i, handleThickness/2 - 2);
+        ctx.stroke();
+      }
+
+      // Hand Tremor Label on Handle
+      ctx.fillStyle = '#f87171';
+      ctx.font = 'bold 11px "JetBrains Mono"';
+      ctx.fillText(`PATIENT HAND [${currentHandAngleDeg >= 0 ? '+' : ''}${currentHandAngleDeg.toFixed(1)}°]`, -handleLen + 20, -18);
+
+      // Tremor waves emanating from handle
+      if (Math.abs(currentHandAngleDeg) > 3) {
+        ctx.strokeStyle = glowColor;
+        ctx.lineWidth = 1.5;
+        for (let w = 1; w <= 3; w++) {
+          ctx.beginPath();
+          ctx.arc(-handleLen * 0.6, 0, 25 + w * 12, -Math.PI/3, Math.PI/3);
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+
+      // -------------------------------------------------------------
+      // DRAW PART 2: 2-Axis Motorized Gimbal Pivot Assembly
+      // -------------------------------------------------------------
+      ctx.save();
+      ctx.translate(pivotX, centerY);
+
+      // Outer Gimbal Ring (Stationary to handle rotation)
+      ctx.rotate(handAngleRad);
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Gimbal mechanical motor stator / MG92B markings
+      ctx.fillStyle = '#06b6d4';
+      ctx.font = '8px "JetBrains Mono"';
+      ctx.fillText('MG92B', -12, 3);
+
+      // Inner Gimbal Core (rotates by servo correction angle)
+      ctx.rotate(servoAngleRad);
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bearing axis dot
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+
+      // -------------------------------------------------------------
+      // DRAW PART 3: Stabilized Spoon Shaft & Bowl (Right of Pivot)
+      // -------------------------------------------------------------
+      ctx.save();
+      ctx.translate(pivotX, centerY);
+      // Net orientation is bowlAngleRad (handAngle + servoAngle)
+      ctx.rotate(bowlAngleRad);
+
+      const shaftLen = 170;
+      const shaftThickness = 8;
+
+      // Shaft gradient (polished medical surgical steel)
+      const shaftGrad = ctx.createLinearGradient(0, -shaftThickness/2, shaftLen, shaftThickness/2);
+      shaftGrad.addColorStop(0, '#94a3b8');
+      shaftGrad.addColorStop(0.5, '#e2e8f0');
+      shaftGrad.addColorStop(1, '#64748b');
+
+      ctx.fillStyle = shaftGrad;
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(0, -shaftThickness/2, shaftLen, shaftThickness, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      // Spoon Neck Flare
+      const bowlStartX = shaftLen;
+      const bowlRadiusX = 75;
+      const bowlRadiusY = 32;
+
+      // Outer Bowl Surface
+      const bowlGrad = ctx.createLinearGradient(bowlStartX, -bowlRadiusY, bowlStartX + bowlRadiusX, bowlRadiusY);
+      bowlGrad.addColorStop(0, '#cbd5e1');
+      bowlGrad.addColorStop(0.5, '#f8fafc');
+      bowlGrad.addColorStop(1, '#94a3b8');
+
+      ctx.fillStyle = bowlGrad;
+      ctx.strokeStyle = state.activeStabilization ? '#10b981' : '#f43f5e';
+      ctx.lineWidth = 2.5;
+
+      ctx.beginPath();
+      // Draw smooth deep ergonomic spoon bowl profile
+      ctx.ellipse(bowlStartX + bowlRadiusX * 0.6, 6, bowlRadiusX * 0.7, bowlRadiusY, 0, 0, Math.PI);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Spoon Rim highlight
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(bowlStartX - 4, 6);
+      ctx.lineTo(bowlStartX + bowlRadiusX * 1.3, 6);
+      ctx.stroke();
+
+      // -------------------------------------------------------------
+      // DRAW PART 4: Fluid (Soup / Cereal) with Physical Sloshing
+      // -------------------------------------------------------------
+      if (document.getElementById('showFluidCheck').checked) {
+        // Fluid sloshing simulation inside bowl coordinate
+        const bowlCenterX = bowlStartX + bowlRadiusX * 0.6;
+        const fluidSurfaceY = 6;
+        const fluidDepth = 22;
+
+        // Fluid angle relative to earth horizon
+        // If stabilized, fluid stays parallel to earth horizon (-bowlAngleRad)
+        const fluidSloshOffset = -bowlAngleRad + (fluidMeniscus * 0.4);
+
+        ctx.save();
+        ctx.translate(bowlCenterX, fluidSurfaceY);
+        ctx.rotate(fluidSloshOffset);
+
+        // Fluid gradient (Warm amber / creamy tomato soup)
+        const fluidGrad = ctx.createLinearGradient(0, 0, 0, fluidDepth);
+        fluidGrad.addColorStop(0, '#fbbf24');
+        fluidGrad.addColorStop(0.7, '#f59e0b');
+        fluidGrad.addColorStop(1, '#d97706');
+
+        ctx.fillStyle = fluidGrad;
+        ctx.beginPath();
+        ctx.ellipse(0, 6, bowlRadiusX * 0.58, fluidDepth * 0.8, 0, 0, Math.PI);
+        ctx.fill();
+
+        // Liquid surface meniscus reflection
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.6)';
+        ctx.beginPath();
+        ctx.ellipse(0, 4, bowlRadiusX * 0.52, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Check spillage threshold (> 18° net bowl deflection)
+        if (Math.abs(bowlAngleDeg) > 17.5) {
+          state.isSpilling = true;
+          // Spilling droplets animation
+          ctx.fillStyle = '#f59e0b';
+          const dropDir = bowlAngleDeg > 0 ? 1 : -1;
+          for (let d = 0; d < 4; d++) {
+            ctx.beginPath();
+            ctx.arc(bowlCenterX + (dropDir * 40) + Math.sin(state.t * 10 + d) * 15, 12 + d * 8, 3.5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          state.isSpilling = false;
+        }
+      }
+
+      // Net Bowl Label
+      ctx.fillStyle = state.activeStabilization ? '#34d399' : '#f87171';
+      ctx.font = 'bold 11px "JetBrains Mono"';
+      ctx.fillText(`BOWL: ${bowlAngleDeg >= 0 ? '+' : ''}${bowlAngleDeg.toFixed(1)}°`, bowlStartX + 10, -22);
+
+      ctx.restore();
+
+      // -------------------------------------------------------------
+      // DRAW PART 5: Kinematic Vector Arcs & Angles
+      // -------------------------------------------------------------
+      if (document.getElementById('showVectorsCheck').checked) {
+        ctx.save();
+        ctx.translate(pivotX, centerY);
+
+        // Arc 1: Hand Tremor Vector (Red)
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(0, 0, 90, Math.min(0, handAngleRad), Math.max(0, handAngleRad));
+        ctx.stroke();
+
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = '10px "JetBrains Mono"';
+        ctx.fillText(`Δθ_hand: ${currentHandAngleDeg.toFixed(1)}°`, -130, -50);
+
+        // Arc 2: Servo Correction Vector (Cyan)
+        if (state.activeStabilization) {
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(0, 0, 115, Math.min(0, servoAngleRad), Math.max(0, servoAngleRad));
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          ctx.fillStyle = '#06b6d4';
+          ctx.fillText(`Δθ_servo: ${currentServoDeg.toFixed(1)}°`, 30, -75);
+        }
+
+        ctx.restore();
+      }
+    }
+
+    function setGimbalView(view) {
+      state.gimbalView = view;
+      const pitchBtn = document.getElementById('viewPitchBtn');
+      const rollBtn = document.getElementById('viewRollBtn');
+      if (view === 'pitch') {
+        pitchBtn.className = 'px-2 py-0.5 rounded bg-cyan-950 text-accentCyan border border-cyan-800';
+        rollBtn.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700';
+      } else {
+        rollBtn.className = 'px-2 py-0.5 rounded bg-cyan-950 text-accentCyan border border-cyan-800';
+        pitchBtn.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700';
+      }
+      showToast(`Switched Canvas to ${view.toUpperCase()} kinematic axis view`, 'info');
+    }
+
+    function toggleActiveStabilization() {
+      state.activeStabilization = !state.activeStabilization;
+      const toggle = document.getElementById('stabilizationToggle');
+      const thumb = document.getElementById('stabilizationToggleThumb');
+      const label = document.getElementById('stabilizationToggleLabel');
+      const badge = document.getElementById('spoonStatusBadge');
+
+      if (state.activeStabilization) {
+        toggle.className = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-accentEmerald focus:outline-none focus:ring-2 focus:ring-accentEmerald';
+        thumb.className = 'inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-6';
+        label.innerText = 'ON';
+        label.className = 'text-xs font-mono font-bold text-accentEmerald w-9';
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-accentEmerald animate-pulse"></span> Stabilizing`;
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-emerald-950/80 text-accentEmerald border border-emerald-800/60';
+        showToast("MG92B Active Stabilization Loop Engaged", "success");
+        playTone(880, 'sine', 0.1, 0.05);
+      } else {
+        toggle.className = 'relative inline-flex h-6 w-11 items-center rounded-full transition-colors bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500';
+        thumb.className = 'inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1';
+        label.innerText = 'OFF';
+        label.className = 'text-xs font-mono font-bold text-rose-400 w-9';
+        badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> Standby`;
+        badge.className = 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-semibold bg-rose-950/80 text-rose-300 border border-rose-800/60';
+        showToast("WARNING: Servos Disengaged — Unassisted Tremor Mode", "warning");
+        playTone(330, 'square', 0.15, 0.06);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. REAL-TIME TELEMETRY LOOP (200 Hz Physics, 60 FPS Render)
+    // -------------------------------------------------------------------------
+    let lastChartUpdate = 0;
+    let lastMetricUpdate = 0;
+
+    function telemetryLoop(timestamp) {
+      // Delta time in seconds
+      const dt = 0.016; // approx 60Hz loop cycle
+      state.t += dt;
+
+      // 1. Synthesize Biophysical Hand Tremor Model
+      // Primary frequency component (Parkinsonian band 4-6 Hz)
+      const omega = 2 * Math.PI * state.tremorFreq;
+      
+      // Secondary harmonic + biological random walk jitter
+      const harmonic2 = 0.26 * Math.sin(2 * omega * state.t + 0.5);
+      const harmonic3 = 0.10 * Math.sin(3 * omega * state.t + 1.2);
+      
+      // Amplitude modulation burst (tremor waxes and wanes slightly in real patients)
+      const burstModulation = 0.85 + 0.15 * Math.sin(2 * Math.PI * 0.2 * state.t);
+      
+      // Pseudo-random noise jitter
+      const noise = (Math.random() - 0.5) * (state.noiseLevel / 50.0) * 4.0;
+
+      // Voluntary Eating Trajectory (0.12 Hz dipping and lifting to mouth)
+      let voluntaryTrajectory = 0;
+      if (state.voluntaryMotion) {
+        voluntaryTrajectory = 7.5 * Math.sin(2 * Math.PI * 0.12 * state.t);
+      }
+
+      // Base tremor angle before stabilization
+      const rawHandDeflection = (state.tremorAmp * burstModulation * (Math.sin(omega * state.t) + harmonic2 + harmonic3) + noise);
+      state.handAngle = rawHandDeflection + voluntaryTrajectory;
+
+      // 2. Active Servo Kinematics & PID Response
+      // ESP32 High-pass filter separates high-freq tremor from slow intentional eating
+      // Servos counter-rotate to eliminate rawHandDeflection while passing voluntaryTrajectory
+      if (state.activeStabilization) {
+        // Fast counter-torque response with ~5ms servo lag simulation
+        const servoGain = 0.965; // 96.5% cancellation efficiency
+        state.servoPitchAngle = -rawHandDeflection * servoGain + state.pitchZeroOffset;
+        state.servoRollAngle = -(rawHandDeflection * 0.35) * Math.cos(omega * state.t + 0.4) + state.rollZeroOffset;
+
+        // Residual bowl deflection
+        state.spoonBowlAngle = state.handAngle + state.servoPitchAngle;
+      } else {
+        state.servoPitchAngle = 0;
+        state.servoRollAngle = 0;
+        state.spoonBowlAngle = state.handAngle;
+      }
+
+      // 3. Fluid Sloshing Physics Simulation (Spring-Damper)
+      const sloshAcceleration = -FLUID_SPRING * (fluidMeniscus - (-state.spoonBowlAngle * 0.02)) - FLUID_DAMPING * fluidVelocity;
+      fluidVelocity += sloshAcceleration;
+      fluidMeniscus += fluidVelocity;
+
+      // Check spillage avoidance
+      if (state.activeStabilization && Math.abs(rawHandDeflection) > 16) {
+        // A potential spill that was avoided by active servos
+        if (Math.random() < 0.005) {
+          state.spillsAvoided++;
+          document.getElementById('hudSpillCount').innerText = state.spillsAvoided;
+        }
+      }
+
+      // 4. Update 2D Gimbal Canvas
+      renderGimbal();
+
+      // 5. Update Gauges & Numeric Indicators
+      updateGaugesAndCounters();
+
+      // 6. Update Chart.js Data (Throttle to ~20 Hz for silky smooth graph)
+      if (timestamp - lastChartUpdate > 50) {
+        lastChartUpdate = timestamp;
+        updateRealtimeCharts();
+      }
+
+      // 7. Update Hardware Health Jitter (Loop rate, battery micro-voltage)
+      if (timestamp - lastMetricUpdate > 1000) {
+        lastMetricUpdate = timestamp;
+        updateHardwareJitter();
+      }
+
+      requestAnimationFrame(telemetryLoop);
+    }
+
+    function updateGaugesAndCounters() {
+      // HUD readouts
+      document.getElementById('hudHandAngle').innerText = `${state.handAngle >= 0 ? '+' : ''}${state.handAngle.toFixed(1)}°`;
+      document.getElementById('hudServoAngle').innerText = `${state.servoPitchAngle >= 0 ? '+' : ''}${state.servoPitchAngle.toFixed(1)}°`;
+      document.getElementById('hudBowlAngle').innerText = `${state.spoonBowlAngle >= 0 ? '+' : ''}${state.spoonBowlAngle.toFixed(1)}°`;
+
+      // Pitch Gauge Bars (-25° to +25°)
+      const pitchVal = state.servoPitchAngle;
+      document.getElementById('gaugePitchValue').innerText = `${pitchVal >= 0 ? '+' : ''}${pitchVal.toFixed(1)}°`;
+      const pitchPct = Math.min(Math.abs(pitchVal) / 25.0 * 100, 100);
+      if (pitchVal < 0) {
+        document.getElementById('gaugePitchBarNeg').style.width = `${pitchPct}%`;
+        document.getElementById('gaugePitchBarPos').style.width = `0%`;
+      } else {
+        document.getElementById('gaugePitchBarNeg').style.width = `0%`;
+        document.getElementById('gaugePitchBarPos').style.width = `${pitchPct}%`;
+      }
+      const pitchTorque = (0.4 + (pitchPct / 100) * 1.2).toFixed(2);
+      document.getElementById('pitchTorque').innerText = `${pitchTorque} kg·cm`;
+
+      // Roll Gauge Bars (-25° to +25°)
+      const rollVal = state.servoRollAngle;
+      document.getElementById('gaugeRollValue').innerText = `${rollVal >= 0 ? '+' : ''}${rollVal.toFixed(1)}°`;
+      const rollPct = Math.min(Math.abs(rollVal) / 25.0 * 100, 100);
+      if (rollVal < 0) {
+        document.getElementById('gaugeRollBarNeg').style.width = `${rollPct}%`;
+        document.getElementById('gaugeRollBarPos').style.width = `0%`;
+      } else {
+        document.getElementById('gaugeRollBarNeg').style.width = `0%`;
+        document.getElementById('gaugeRollBarPos').style.width = `${rollPct}%`;
+      }
+      const rollTorque = (0.2 + (rollPct / 100) * 0.8).toFixed(2);
+      document.getElementById('rollTorque').innerText = `${rollTorque} kg·cm`;
+
+      // Spillage Safety Indicator
+      const alertBox = document.getElementById('spillAlertBox');
+      const alertText = document.getElementById('spillAlertText');
+      if (state.isSpilling) {
+        alertBox.className = 'bg-rose-950/90 backdrop-blur border border-rose-500 rounded-lg px-3 py-1.5 text-xs font-mono flex items-center gap-2 text-rose-300 animate-bounce';
+        alertText.innerText = 'SPILLAGE WARNING!';
+        if (state.audioEnabled && Math.random() < 0.2) {
+          playTone(220, 'sawtooth', 0.1, 0.08);
+        }
+      } else {
+        const bowlResidual = Math.abs(state.spoonBowlAngle);
+        const margin = Math.max(10, Math.round(100 - (bowlResidual / 18.0) * 100));
+        alertBox.className = 'bg-emerald-950/80 backdrop-blur border border-emerald-500/50 rounded-lg px-3 py-1.5 text-xs font-mono flex items-center gap-2 text-emerald-300';
+        alertText.innerText = `Liquid Stability: Safe (${margin}%)`;
+      }
+    }
+
+    function updateRealtimeCharts() {
+      if (!waveformChart1 || !waveformChart2) return;
+
+      // 1. Append to Waveform 1
+      const handData = waveformChart1.data.datasets[0].data;
+      const bowlData = waveformChart1.data.datasets[1].data;
+
+      handData.shift();
+      handData.push(parseFloat(state.handAngle.toFixed(2)));
+
+      bowlData.shift();
+      bowlData.push(parseFloat(state.spoonBowlAngle.toFixed(2)));
+
+      waveformChart1.update('none');
+
+      // 2. Append to Waveform 2
+      const servoData = waveformChart2.data.datasets[0].data;
+      const fftData = waveformChart2.data.datasets[1].data;
+
+      servoData.shift();
+      servoData.push(parseFloat(state.servoPitchAngle.toFixed(2)));
+
+      // Calculate simulated FFT peak power around state.tremorFreq
+      const fftPower = Math.min(95, Math.round((state.tremorAmp / 30.0) * 85 + (Math.random() * 8)));
+      fftData.shift();
+      fftData.push(fftPower);
+
+      waveformChart2.update('none');
+
+      // Calculate suppression ratio
+      const rawRms = Math.abs(state.handAngle);
+      const residualRms = Math.abs(state.spoonBowlAngle);
+      let suppression = 0;
+      if (state.activeStabilization && rawRms > 0.1) {
+        suppression = Math.max(50, Math.min(96, ((rawRms - residualRms) / rawRms) * 100));
+      } else {
+        suppression = 0;
+      }
+
+      document.getElementById('liveSuppressionRate').innerText = `${suppression.toFixed(1)}%`;
+      const attenDb = state.activeStabilization ? (-12.0 - (suppression / 100) * 8).toFixed(1) : '0.0';
+      document.getElementById('attenuationDb').innerText = `${attenDb} dB`;
+      document.getElementById('liveFftPeak').innerText = `${state.tremorFreq.toFixed(1)} Hz`;
+
+      // Track session metrics if meal session is active
+      if (state.sessionActive) {
+        state.sessionSampleCount++;
+        state.sessionSuppressionSum += suppression;
+        // Detect voluntary bites (transit cycles)
+        if (state.voluntaryMotion && Math.sin(2 * Math.PI * 0.12 * state.t) > 0.98 && Math.random() < 0.08) {
+          state.sessionBiteCount++;
+          playTone(520, 'sine', 0.1, 0.04);
+        }
+      }
+    }
+
+    function updateHardwareJitter() {
+      // ESP32 Loop jitter
+      const jitter = (Math.random() - 0.5) * 1.2;
+      const freq = (200.4 + jitter).toFixed(1);
+      document.getElementById('spoonLoopFreq').innerText = freq;
+
+      // Servo temps
+      const pTemp = (34.0 + Math.random() * 0.6).toFixed(1);
+      const rTemp = (34.8 + Math.random() * 0.6).toFixed(1);
+      document.getElementById('servoPitchTemp').innerText = pTemp;
+      document.getElementById('servoRollTemp').innerText = rTemp;
+
+      // Ping
+      const ping = 11 + Math.floor(Math.random() * 3);
+      document.getElementById('networkPing').innerText = `${ping} ms latency`;
+
+      // RSSI
+      const rssi = -55 + Math.floor(Math.random() * 3);
+      document.getElementById('ringRssi').innerText = `${rssi}`;
+    }
+
+    // -------------------------------------------------------------------------
+    // 7. TREMOR SIMULATION CONTROL HANDLERS & PRESETS
+    // -------------------------------------------------------------------------
+    function onTremorParamChange() {
+      state.tremorFreq = parseFloat(document.getElementById('freqSlider').value);
+      state.tremorAmp = parseFloat(document.getElementById('ampSlider').value);
+      state.noiseLevel = parseInt(document.getElementById('noiseSlider').value);
+      state.voluntaryMotion = document.getElementById('voluntaryMotionCheck').checked;
+
+      document.getElementById('freqValueLabel').innerText = `${state.tremorFreq.toFixed(1)} Hz`;
+      document.getElementById('ampValueLabel').innerText = `±${state.tremorAmp.toFixed(1)}°`;
+      document.getElementById('noiseValueLabel').innerText = `${state.noiseLevel}%`;
+
+      // Clinical frequency band classification
+      const note = document.getElementById('freqDiagnosisNote');
+      const bandLabel = document.getElementById('tremorBandLabel');
+      if (state.tremorFreq < 4.0) {
+        note.innerText = "Low-frequency cerebellar / post-traumatic ataxia band.";
+        bandLabel.innerText = "Cerebellar (<4Hz)";
+        bandLabel.className = "text-indigo-400";
+      } else if (state.tremorFreq <= 6.5) {
+        note.innerText = "Classic Parkinsonian resting tremor band (4.0–6.5 Hz).";
+        bandLabel.innerText = "Parkinsonian (4-6Hz)";
+        bandLabel.className = "text-amber-400";
+      } else {
+        note.innerText = "High-frequency essential / physiological tremor band.";
+        bandLabel.innerText = "Essential (>6.5Hz)";
+        bandLabel.className = "text-rose-400";
+      }
+    }
+
+    function applyPreset(preset) {
+      if (preset === 'mild') {
+        document.getElementById('freqSlider').value = 4.2;
+        document.getElementById('ampSlider').value = 6.5;
+        document.getElementById('noiseSlider').value = 15;
+        showToast("Applied Preset: Resting Mild (4.2 Hz, ±6.5°)", "info");
+      } else if (preset === 'moderate') {
+        document.getElementById('freqSlider').value = 5.5;
+        document.getElementById('ampSlider').value = 14.0;
+        document.getElementById('noiseSlider').value = 22;
+        showToast("Applied Preset: Postural Moderate (5.5 Hz, ±14.0°)", "info");
+      } else if (preset === 'severe') {
+        document.getElementById('freqSlider').value = 7.0;
+        document.getElementById('ampSlider').value = 24.0;
+        document.getElementById('noiseSlider').value = 35;
+        showToast("Applied Preset: Severe Action Tremor (7.0 Hz, ±24.0°)", "warning");
+      } else if (preset === 'medicated') {
+        document.getElementById('freqSlider').value = 3.8;
+        document.getElementById('ampSlider').value = 3.5;
+        document.getElementById('noiseSlider').value = 10;
+        showToast("Applied Preset: Medicated Levodopa On-State (3.8 Hz, ±3.5°)", "success");
+      }
+      onTremorParamChange();
+      playTone(440, 'sine', 0.1, 0.05);
+    }
+
+    // -------------------------------------------------------------------------
+    // 8. ACTIVE MEAL SESSION MANAGER (Start / Stop & Storage)
+    // -------------------------------------------------------------------------
+    function toggleMealSession() {
+      state.sessionActive = !state.sessionActive;
+      const btn = document.getElementById('sessionToggleBtn');
+      const icon = document.getElementById('sessionBtnIcon');
+      const text = document.getElementById('sessionBtnText');
+      const timerBadge = document.getElementById('sessionTimerBadge');
+
+      if (state.sessionActive) {
+        // Start Session
+        state.sessionStartTime = Date.now();
+        state.sessionSeconds = 0;
+        state.sessionBiteCount = 0;
+        state.sessionSpillCount = 0;
+        state.sessionSuppressionSum = 0;
+        state.sessionSampleCount = 0;
+
+        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-lg shadow-rose-950/40 border border-rose-400/30 transition transform active:scale-95';
+        icon.setAttribute('data-lucide', 'square');
+        text.innerText = 'Stop Meal Session';
+        timerBadge.classList.remove('hidden');
+
+        state.sessionTimerInterval = setInterval(() => {
+          state.sessionSeconds++;
+          const hrs = String(Math.floor(state.sessionSeconds / 3600)).padStart(2, '0');
+          const mins = String(Math.floor((state.sessionSeconds % 3600) / 60)).padStart(2, '0');
+          const secs = String(state.sessionSeconds % 60).padStart(2, '0');
+          document.getElementById('sessionTimer').innerText = `${hrs}:${mins}:${secs}`;
+        }, 1000);
+
+        showToast("Meal Telemetry Session Started — Logging to RPi SQLite", "success");
+        playTone(587.33, 'sine', 0.15, 0.06);
+      } else {
+        // Stop Session & Save
+        clearInterval(state.sessionTimerInterval);
+        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs sm:text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/40 border border-emerald-400/30 transition transform active:scale-95';
+        icon.setAttribute('data-lucide', 'play');
+        text.innerText = 'Start Meal Session';
+        timerBadge.classList.add('hidden');
+
+        // Package new session log
+        const avgSuppression = state.sessionSampleCount > 0 
+          ? (state.sessionSuppressionSum / state.sessionSampleCount).toFixed(1) 
+          : '87.5';
+        
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = now.toISOString().split('T')[0];
+
+        const mins = Math.floor(state.sessionSeconds / 60);
+        const secs = state.sessionSeconds % 60;
+        const durationStr = `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
+
+        const newSession = {
+          id: `SS-${dateStr.replace(/-/g, '')}-${String(pastSessions.length + 1).padStart(2, '0')}`,
+          date: `${dateStr} ${timeStr}`,
+          timestamp: `Today, ${timeStr}`,
+          meal: now.getHours() < 11 ? "Breakfast" : (now.getHours() < 16 ? "Lunch" : "Dinner"),
+          duration: durationStr,
+          durationSec: state.sessionSeconds,
+          suppressionRatio: parseFloat(avgSuppression),
+          meanFreq: state.tremorFreq,
+          spoonfulCount: Math.max(state.sessionBiteCount, Math.floor(state.sessionSeconds / 25) + 3),
+          spillsPrevented: Math.floor(state.sessionSeconds / 45) + 4,
+          notes: `Live meal session recorded. Active stabilization efficiency: ${avgSuppression}%. Mean frequency: ${state.tremorFreq} Hz.`
+        };
+
+        pastSessions.unshift(newSession);
+        renderSessionTable();
+        showToast(`Session ${newSession.id} saved to Raspberry Pi SQLite!`, "success");
+        playTone(880, 'sine', 0.2, 0.08);
+
+        // Open modal to inspect the newly completed session
+        openClinicalReportModal(newSession.id);
+      }
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. ZERO CALIBRATE GIMBAL ACTION
+    // -------------------------------------------------------------------------
+    function triggerGimbalCalibration() {
+      const modal = document.getElementById('calibrationModal');
+      const stepText = document.getElementById('calibrationStepText');
+      const progressBar = document.getElementById('calibrationProgressBar');
+      modal.showModal();
+
+      let progress = 20;
+      stepText.innerText = "Sampling MPU6050 stationary zero-g baseline...";
+      progressBar.style.width = "25%";
+      playTone(440, 'sine', 0.1, 0.05);
+
+      setTimeout(() => {
+        progress = 60;
+        stepText.innerText = "Computing gyro bias drift matrix & zeroing servos...";
+        progressBar.style.width = "65%";
+        playTone(550, 'sine', 0.1, 0.05);
+      }, 700);
+
+      setTimeout(() => {
+        progress = 100;
+        stepText.innerText = "Zero calibration verified! ΔPitch: -0.18°, ΔRoll: +0.07°";
+        progressBar.style.width = "100%";
+        state.pitchZeroOffset = 0.0;
+        state.rollZeroOffset = 0.0;
+        playTone(880, 'triangle', 0.15, 0.08);
+      }, 1400);
+
+      setTimeout(() => {
+        modal.close();
+        showToast("Gimbal Zero-Calibrated: Servo Offsets Stored to EEPROM", "success");
+      }, 1900);
+    }
+
+    // -------------------------------------------------------------------------
+    // 10. SESSION TABLE RENDERING & FILTERING
+    // -------------------------------------------------------------------------
+    let currentTableFilter = 'all';
+
+    function renderSessionTable() {
+      const tbody = document.getElementById('sessionTableBody');
+      tbody.innerHTML = '';
+
+      let filtered = pastSessions;
+      if (currentTableFilter !== 'all') {
+        filtered = filtered.filter(s => s.meal.toLowerCase() === currentTableFilter.toLowerCase());
+      }
+
+      const query = document.getElementById('sessionSearchInput').value.toLowerCase().trim();
+      if (query) {
+        filtered = filtered.filter(s => s.id.toLowerCase().includes(query) || s.notes.toLowerCase().includes(query) || s.meal.toLowerCase().includes(query));
+      }
+
+      document.getElementById('sessionTableCount').innerText = `Showing ${filtered.length} of ${pastSessions.length} recorded meal sessions`;
+
+      filtered.forEach(session => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-medCardHover/70 transition border-b border-medBorder/40';
+
+        let mealBadgeClass = 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60';
+        if (session.meal === 'Breakfast') mealBadgeClass = 'bg-indigo-950/80 text-indigo-300 border-indigo-800/60';
+        if (session.meal === 'Dinner') mealBadgeClass = 'bg-amber-950/80 text-amber-300 border-amber-800/60';
+
+        tr.innerHTML = `
+          <td class="py-3 px-4">
+            <span class="font-bold text-slate-200 block">${session.id}</span>
+            <span class="text-[10px] text-slate-500">${session.timestamp}</span>
+          </td>
+          <td class="py-3 px-3">
+            <span class="inline-block px-2 py-0.5 rounded text-[10px] font-semibold border ${mealBadgeClass}">
+              ${session.meal}
+            </span>
+          </td>
+          <td class="py-3 px-3 text-slate-300">${session.duration}</td>
+          <td class="py-3 px-3">
+            <div class="flex items-center gap-2">
+              <div class="w-14 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                <div class="h-full bg-accentEmerald rounded-full" style="width: ${session.suppressionRatio}%;"></div>
+              </div>
+              <span class="text-accentEmerald font-bold">${session.suppressionRatio}%</span>
+            </div>
+          </td>
+          <td class="py-3 px-3 text-slate-300">${session.meanFreq} Hz</td>
+          <td class="py-3 px-3 text-slate-300">${session.spoonfulCount} bites</td>
+          <td class="py-3 px-3">
+            <span class="text-emerald-400 font-semibold">${session.spillsPrevented}</span>
+          </td>
+          <td class="py-3 px-4 max-w-xs truncate text-slate-400 text-[11px]" title="${session.notes}">
+            ${session.notes}
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="openClinicalReportModal('${session.id}')" class="px-2.5 py-1 rounded bg-medPanel hover:bg-slate-800 text-accentCyan border border-medBorder transition hover:border-accentCyan">
+              Inspect
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Update print report table too
+      const printTbody = document.getElementById('printTableBody');
+      if (printTbody) {
+        printTbody.innerHTML = pastSessions.map(s => `
+          <tr>
+            <td class="border border-slate-300 p-2">${s.id}</td>
+            <td class="border border-slate-300 p-2">${s.meal}</td>
+            <td class="border border-slate-300 p-2">${s.duration}</td>
+            <td class="border border-slate-300 p-2">${s.suppressionRatio}%</td>
+            <td class="border border-slate-300 p-2">${s.meanFreq} Hz</td>
+            <td class="border border-slate-300 p-2">${s.spoonfulCount}</td>
+            <td class="border border-slate-300 p-2">${s.spillsPrevented}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    function filterSessionTable(filter) {
+      currentTableFilter = filter;
+      ['All', 'Breakfast', 'Lunch', 'Dinner'].forEach(f => {
+        const btn = document.getElementById(`filterBtn${f}`);
+        if (f.toLowerCase() === filter.toLowerCase()) {
+          btn.className = 'px-2.5 py-1 rounded-md bg-accentCyan text-slate-900 font-bold transition';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-md text-slate-400 hover:text-slate-200 transition';
+        }
+      });
+      renderSessionTable();
+    }
+
+    function searchSessionTable() {
+      renderSessionTable();
+    }
+
+    // -------------------------------------------------------------------------
+    // 11. MODAL INSPECTOR & CLINICAL REPORT ACTIONS
+    // -------------------------------------------------------------------------
+    function openClinicalReportModal(sessionId) {
+      const session = pastSessions.find(s => s.id === sessionId) || pastSessions[0];
+      selectedSession = session;
+
+      document.getElementById('modalSessionTitle').innerText = `Session Inspection: ${session.id}`;
+      document.getElementById('modalMealBadge').innerText = session.meal;
+      document.getElementById('modalSessionTimestamp').innerText = `Recorded: ${session.timestamp} • Patient: Elena Rostova (71y)`;
+      document.getElementById('modalSuppression').innerText = `${session.suppressionRatio}%`;
+      document.getElementById('modalFrequency').innerText = `${session.meanFreq} Hz`;
+      document.getElementById('modalSpoonfuls').innerText = `${session.spoonfulCount} bites`;
+      document.getElementById('modalSpills').innerText = `${session.spillsPrevented} events`;
+      document.getElementById('modalNotesInput').value = session.notes;
+
+      document.getElementById('sessionModal').showModal();
+      playTone(660, 'sine', 0.08, 0.04);
+    }
+
+    function closeSessionModal() {
+      document.getElementById('sessionModal').close();
+    }
+
+    function saveModalNotes() {
+      if (selectedSession) {
+        selectedSession.notes = document.getElementById('modalNotesInput').value;
+        renderSessionTable();
+        showToast("Clinician notes successfully updated and committed to SQLite", "success");
+      }
+    }
+
+    function downloadSessionJSON() {
+      if (!selectedSession) return;
+      const data = {
+        metadata: {
+          system: "SteadySpoon Medical IoT Assistive Dining System",
+          deviceFirmware: "2.4.1-ESP32-MPU6050",
+          wearableRing: "MDBT42Q-BMI270",
+          centralHub: "RaspberryPi-Zero-2W-SQLite",
+          patient: {
+            id: "PT-8421",
+            name: "Elena Rostova",
+            age: 71,
+            condition: "Parkinson's Disease (Hoehn & Yahr Stage 2.5)"
+          }
+        },
+        session: selectedSession,
+        telemetrySampleSummary: {
+          controlLoopHz: 200.4,
+          bleStreamHz: 100.0,
+          fftPeakFrequencyHz: selectedSession.meanFreq,
+          tremorSuppressionRatioPct: selectedSession.suppressionRatio,
+          totalSpoonfulBites: selectedSession.spoonfulCount,
+          spillsAvoidedEstimate: selectedSession.spillsPrevented
+        }
+      };
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SteadySpoon_Telemetry_${selectedSession.id}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${selectedSession.id}.json`, "success");
+    }
+
+    function downloadSessionCSV() {
+      if (!selectedSession) return;
+      let csv = "Timestamp_ms,HandTremorPitch_deg,HandTremorRoll_deg,ServoPitchOffset_deg,ServoRollOffset_deg,ResidualBowlMotion_deg\n";
+      // Generate realistic 100 Hz CSV trace
+      for (let i = 0; i < 200; i++) {
+        const timeMs = i * 10;
+        const handP = (selectedSession.meanFreq * Math.sin(i * 0.3)).toFixed(2);
+        const handR = (selectedSession.meanFreq * 0.4 * Math.cos(i * 0.3)).toFixed(2);
+        const servoP = (-handP * 0.94).toFixed(2);
+        const servoR = (-handR * 0.94).toFixed(2);
+        const residual = (parseFloat(handP) + parseFloat(servoP)).toFixed(2);
+        csv += `${timeMs},${handP},${handR},${servoP},${servoR},${residual}\n`;
+      }
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SteadySpoon_RawKinematics_${selectedSession.id}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Downloaded ${selectedSession.id}.csv`, "success");
+    }
+
+    function printClinicalReportFromModal() {
+      window.print();
+    }
+
+    function toggleExportMenu() {
+      const dropdown = document.getElementById('exportDropdown');
+      dropdown.classList.toggle('hidden');
+    }
+
+    function exportTelemetryData(format) {
+      document.getElementById('exportDropdown').classList.add('hidden');
+      if (format === 'json') {
+        downloadSessionJSON();
+      } else {
+        downloadSessionCSV();
+      }
+    }
+
+    // Close dropdown on click outside
+    window.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('exportDropdown');
+      if (!e.target.closest('#exportDropdown') && !e.target.closest('button[onclick="toggleExportMenu()"]')) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // -------------------------------------------------------------------------
+    // 12. INITIALIZATION ON DOM READY
+    // -------------------------------------------------------------------------
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      initCharts();
+      renderSessionTable();
+      onTremorParamChange();
+
+      // Start high-performance requestAnimationFrame loop
+      requestAnimationFrame(telemetryLoop);
+
+      // Welcome toast
+      setTimeout(() => {
+        showToast("SteadySpoon Central Hub: Raspberry Pi Zero 2 W Synced", "info");
+      }, 600);
+    });
+  </script>
+</body>
+</html>
